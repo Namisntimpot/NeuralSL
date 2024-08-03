@@ -60,8 +60,19 @@ class SinPhaseShiftPattern(PatternGenerator):
                 x = np.linspace(0, 2 * np.pi * freq, self.width)
                 y = (1 + np.cos(x + phase)) / 2  # 正弦波图案
                 pattern = np.tile(y, (self.height, 1))  # 重复图案
-                code_matrix[len(pattern), :] = y
+                code_matrix[len(patterns), :] = y
                 patterns.append(pattern)
         if save:
             self.save_all_to_dir(patterns, code_matrix)
         return patterns, code_matrix
+    
+
+def main():
+    sin_pattern = SinPhaseShiftPattern(800, 600, output_dir="./phase_shift_pattrns", format="png", minF=1, maxF=8, n_shifts=4)
+    patterns, code_matrix = sin_pattern.gen_pattern()
+    print(len(patterns))
+    print(code_matrix.shape)
+
+
+if __name__ == '__main__':
+    main()

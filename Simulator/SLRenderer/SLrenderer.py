@@ -19,6 +19,15 @@ class SLRendererSettings(bpy.types.PropertyGroup):
     specify_pattern_dir: bpy.props.BoolProperty(name="Specify Pattern Dir", default=False)
     pattern_dir_path: bpy.props.StringProperty(name="Pattern Dir Path", default="//", subtype="DIR_PATH")
     output_dir_path: bpy.props.StringProperty(name="Output Dir Path", default="//", subtype='DIR_PATH')
+    img_format: bpy.props.EnumProperty(
+        name = "Image Format",
+        items=[
+            ('PNG', 'PNG', ''),
+            ('JPEG','JPEG',''),
+            ('OPEN_EXR', 'OpenEXR format. It is a HDR format with 32-bit float data.', '')
+        ],
+        default='PNG'
+    )
     color_mode: bpy.props.EnumProperty(
         name="Color Mode",
         items=[
@@ -38,46 +47,62 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
         scene = context.scene
         settings : SLRendererSettings = scene.slrenderer_settings
 
-        abs_path = bpy.path.abspath(settings.output_dir_path) if settings.output_dir_path.startswith('//') else os.path.abspath(settings.output_dir_path)
+        abs_path = convert_path_to_abs_path(settings.output_dir_path)
         if not os.path.isdir(abs_path):
             self.report({'ERROR'}, "Invalid output dir path")
             return {'CANCELLED'}
 
         if not settings.specify_pattern_dir:    # 没有指定pattern的目录，认为已经在blender中设置好，直接渲染即可.
-            export(
-                context, settings.resolution_x, settings.resolution_y,
-                settings.output_dir_path, settings.export_id,
-                settings.color_mode, settings.export_img, settings.export_depth, settings.export_normal
-            )
+            # 先depth, normal
+            if settings.export_depth or settings.export_normal:
+                export(
+                    context, settings.resolution_x, settings.resolution_y,
+                    settings.output_dir_path, settings.export_id,
+                    settings.color_mode, 'OPEN_EXR',
+                    False, settings.export_depth, settings.export_normal
+                )
+            # 再img
+            if settings.export_img:
+                export(
+                    context, settings.resolution_x, settings.resolution_y,
+                    settings.output_dir_path, settings.export_id,
+                    settings.color_mode, settings.img_format,
+                    settings.export_img, False, False
+                )
 
         else:
+            pattern_dir = convert_path_to_abs_path(settings.pattern_dir_path)
             try:
-                pattern_file_lists = sorted(os.listdir(settings.pattern_dir_path))
+                pattern_file_lists = sorted(os.listdir(pattern_dir))
             except Exception as e:
                 self.report({'ERROR'}, "Invalid pattern dir path. ERROR: {}".format(e))
                 return {"CANCELLED"}
             n_frames = len(pattern_file_lists)
             # 找到projector
             projector = self.find_projector(scene)
-            # 先逐帧渲染图片
-            if settings.export_img:
-                for i in range(n_frames):
-                    self.setup_frame(scene, i)
-                    tex_path = os.path.join(settings.pattern_dir_path, pattern_file_lists[i])
-                    self.apply_texture_to_projector(scene, projector, tex_path)
-                    export(
-                        context, settings.resolution_x, settings.resolution_y,
-                        settings.output_dir_path, settings.export_id,
-                        settings.color_mode, settings.export_img, False, False
-                    )
-            # 最后只导出一次深度图和normal（如果需要）
+            # 最开始只导出一次深度图和normal（如果需要）
             self.setup_frame(scene, 0)
             if settings.export_depth or settings.export_normal:
                 export(
                     context, settings.resolution_x, settings.resolution_y,
                     settings.output_dir_path, settings.export_id,
-                    settings.color_mode, False, settings.export_depth, settings.export_normal
-                )            
+                    settings.color_mode, 'OPEN_EXR', False, settings.export_depth, settings.export_normal
+                )   
+            # 再逐帧渲染图片
+            if settings.export_img:
+                for i in range(n_frames):
+                    self.setup_frame(scene, i)
+                    tex_path = os.path.join(pattern_dir, pattern_file_lists[i])
+                    self.apply_texture_to_projector(scene, projector, tex_path)
+                    if i == 0:
+                        # 只有第一次需要从头准备节点.
+                        export(
+                            context, settings.resolution_x, settings.resolution_y,
+                            settings.output_dir_path, settings.export_id,
+                            settings.color_mode, settings.img_format, settings.export_img, False, False
+                        )
+                    else:
+                        bpy.ops.render.render()         
         
         return {'FINISHED'}
     
@@ -101,7 +126,8 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
         texture_node.image = loaded_texture
         
 
-
+def convert_path_to_abs_path(p: str):
+    return bpy.path.abspath(p) if p.startswith('//') else os.path.abspath(p)
 
 
 def register():

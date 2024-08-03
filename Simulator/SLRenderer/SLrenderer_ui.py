@@ -25,5 +25,6 @@ class SLRENDERER_PT_Setting_Panel(bpy.types.Panel):
         layout.prop(settings, "pattern_dir_path")
         layout.prop(settings, "output_dir_path")
         layout.prop(settings, "color_mode")  # 添加枚举属性
+        layout.prop(settings, "img_format")
         
         layout.operator("slrenderer.export", icon='ADD', text="Export")

@@ -4,7 +4,7 @@ import bpy
 def export(
     context: bpy.types.Context,
     reso_x, reso_y, output_dir_path:str = None, id = 0,
-    color_mode = 'RGB',
+    color_mode = 'RGB', img_format = 'OPEN_EXR',
     image = True, depth = True, normal = True
 ):
     # 开启必要的功能
@@ -15,11 +15,14 @@ def export(
     bpy.context.scene.use_nodes = True
     tree = bpy.context.scene.node_tree
     links = tree.links
-    bpy.context.scene.render.image_settings.color_depth = '32'
-    bpy.context.scene.render.image_settings.color_mode = color_mode
-
     # 必须设置，否则无法输出深度
-    bpy.context.scene.render.image_settings.file_format = "OPEN_EXR"
+    bpy.context.scene.render.image_settings.file_format = img_format
+
+    if img_format == 'OPEN_EXR':
+        bpy.context.scene.render.image_settings.color_depth = '32'
+    else:
+        bpy.context.scene.render.image_settings.color_depth = '8'
+    bpy.context.scene.render.image_settings.color_mode = color_mode
 
     # 必须设置，否则无法输出法向
     bpy.context.view_layer.use_pass_normal = True

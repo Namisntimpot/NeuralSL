@@ -11,7 +11,7 @@ class SLPipeline:
         Kp: projector's intrinsic matrix  
         Kc: camera's intrinsic matrix
         R:  the rotation matrix of the camera relative to the projector, (3, 3)
-        T:  the translation vector of the camera relative to the projector, (3)
+        T:  the translation vector of the camera relative to the projector, (3) (in mm)
         code_matrix: the code matrix. (n_patterns, width)
         '''
         self.Kp, self.Kc = Kp, Kc
@@ -42,7 +42,7 @@ class SLPipeline:
     
     def get_depth(self, matched_indices:np.ndarray):
         h, w = matched_indices.shape[-2], matched_indices.shape[-1]
-        mp1 = np.expand_dims(self.Mp[...,0,:3], axis=-1)
+        mp1 = np.expand_dims(self.Mp[...,0,:3], axis=0)
         mp14 = self.Mp[...,0,3]
         
         y, x = np.mgrid[:h, :w]

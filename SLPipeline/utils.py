@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import cv2
 import matplotlib.pyplot as plt
 
@@ -24,6 +25,12 @@ def ZNCC(a:np.ndarray, b:np.ndarray):
 #     ret = np.einsum("...pk, ...qk -> ...pq", za / l2_za, zb / l2_zb)
 #     return ret
 
+def ZNCC_torch(a:torch.Tensor, b:torch.Tensor):
+    za = a - torch.mean(a, dim=-1, keepdim=True)
+    zb = b - torch.mean(b, dim=-2, keepdim=True)
+    l2_za = torch.sqrt(torch.sum(za ** 2, dim=-1, keepdim=True))
+    l2_zb = torch.sqrt(torch.sum(zb ** 2, dim=-2, keepdim=True))
+    return torch.einsum("...pk, ...kq -> ...pq", za / l2_za, zb / l2_zb)
 
 def compute_ideal_intrinsic(focal_length, reso_x, reso_y, sensor_x, sensor_y):
     '''

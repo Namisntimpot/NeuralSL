@@ -111,9 +111,13 @@ class AlacartePattern(PatternGenerator):
         else:
             exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, self.code_matrix)))   # (n_samples, cam_w, pat_w)
         norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
-        
-
-        pass
+        aux_mat = torch.zeros((self.width, self.cam_w))
+        for i in range(-self.tolerance, self.tolerance + 1):
+            aux_mat[..., torch.clip(matched_indices + i, 0, self.width), torch.arange(self.cam_w)] = 1
+        correct = torch.einsum('...ij, ji -> ...i', norm, aux_mat)
+        correct = torch.sum(correct, dim=-1)
+        expected_error = torch.sum(self.cam_w - correct) / n_samples
+        return expected_error
     
     def get_simple_defocus_kernel(self):
         '''

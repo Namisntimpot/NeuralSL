@@ -1,9 +1,14 @@
 import os
+import logger
 import numpy as np
 import torch
+from torch import nn as nn
+from torch import optim
+from torch.utils.tensorboard import SummaryWriter
 
 from SLPipeline.gen_pattern import PatternGenerator
 from SLPipeline.utils import ZNCC_torch
+from .utils import *
 
 
 class GeometricConstraint:
@@ -64,7 +69,7 @@ class AlacartePattern(PatternGenerator):
             self, pat_width, pat_height, n_patterns, 
             cam_width, tolerance, geom_constraints:GeometricConstraint, ambient_max = 0.1, mu=300,
             output_dir=None, format='png', defocus = False, rho:int = None, maxF = None,
-            device = torch.device('cuda')
+            device:str = 'cuda'
         ) -> None:
         super().__init__(pat_width, pat_height, n_patterns, output_dir, format)
         self.cam_w = cam_width
@@ -75,15 +80,20 @@ class AlacartePattern(PatternGenerator):
         self.maxF = maxF
         self.defocus = defocus
         self.rho = rho
-        self.defocus_matrix = self.get_simple_defocus_kernel()        
+        
+        
+        self.device = torch.device(device)
+        self.defocus_matrix = self.get_simple_defocus_kernel()
+        self.code_matrix = nn.Parameter(torch.rand((self.n_patterns, self.width))).to(self.device)  # (n_patterns, pat_width)
+        self.optimizer = optim.Adam([self.code_matrix], 0.01)
 
-        self.code_matrix = None  # (n_patterns, pat_width)
         
     def transport(self, transport_matrix:torch.Tensor, ambient:torch.Tensor, noise:torch.Tensor):
         if self.defocus:
             C = torch.matmul(self.code_matrix, self.defocus_matrix)
         else:
             C = self.code_matrix
+        # TODO: expand ambient's dim
         return torch.transpose(torch.matmul(C, transport_matrix, ambient, noise), dim0=-2, dim1=-1)  # place the code at the last axis.
     
     def sample_conditions(self, n_samples):
@@ -102,7 +112,7 @@ class AlacartePattern(PatternGenerator):
             T[:, matched_indices, off] = torch.rand((n_samples, self.cam_w))
         else:
             raise NotImplementedError
-        return matched_indices, T, ambient, noise
+        return matched_indices.to(self.device), T.to(self.device), ambient.to(self.device), noise.to(self.device)
 
     def compute_error(self, observation:torch.Tensor, matched_indices:torch.Tensor):
         n_samples = observation.shape[0]
@@ -127,6 +137,58 @@ class AlacartePattern(PatternGenerator):
         defocus_matrix = np.zeros((self.width, self.width))
         for i in range(self.width):
             defocus_matrix[max(0, i - self.rho) : min(self.width, i + self.rho), i] = 1. / (2 * self.rho)
-        return torch.from_numpy(defocus_matrix)
+        return torch.from_numpy(defocus_matrix).to(self.device)
 
-    
+    def optimize(self, samples_per_iter = 2, n_iters=300, logdir: str = None):
+        # sample 500 conditions for evaluation.
+        self.eval_conditions = self.sample_conditions(500)
+        eval_time = 50   # evaluate per ${eval_time} iters
+
+        if logdir is not None:
+            global_step = 0
+            writer = SummaryWriter(logdir)
+        
+        for i in range(n_iters):
+            samples_matched_indices, samples_T, samples_ambient, samples_noise = self.sample_conditions(samples_per_iter)
+            # (n_samples, cam_w), (n_samples, pat_w, cam_w), (n_samples, cam_w), (n_samples, n_patterns, cam_w)
+            observations = self.transport(samples_T, samples_ambient, samples_noise)
+            error = self.compute_error(observations, samples_matched_indices)
+            self.optimizer.zero_grad()
+            error.backward()
+            self.optimizer.step()
+
+            if i % eval_time == 0:
+                eval_err = self.evaluate()
+                print("[iter %04d]: the evaluation error: %f" % (i, eval_err.detach().cpu().item()))
+                if logdir is not None:
+                    writer.add_scalar('error in eval', eval_err.detach().cpu().item(), global_step)
+
+            if logdir is not None:
+                writer.add_scalar('error per iter', error.detach().cpu().item(), global_step)
+                global_step += 1
+
+        print("Iterations finished.")
+
+
+    def pattern_post_process(self):
+        '''
+        limit the range of the pattern pixels to [0, 1]
+        (unimplemented) limit the frequence of the pattern to [0, maxF]
+        '''
+        with torch.no_grad():
+            torch.clip_(self.code_matrix, 0, 1)
+            if self.maxF is not None:
+                self.code_matrix = clip_frequencies(self.code_matrix, self.maxF)
+
+    def evaluate(self):
+        '''
+        the "optimize" method must be called earlier.
+        '''
+        with torch.no_grad():
+            eval_matched, eval_T, eval_ambient, eval_noise = self.eval_conditions
+            obs = self.transport(eval_T, eval_ambient, eval_noise)
+            err = self.compute_error(obs, eval_matched)
+            return err
+        
+    def save(self):
+        pass

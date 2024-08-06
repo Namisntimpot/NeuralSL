@@ -6,10 +6,11 @@ import cv2
 from SLPipeline.pipeline import SLPipeline
 from SLPipeline.utils import *
 
-dbg_dir = "Simulator/testdir/debug/"
-code_matrix_path = "Simulator/testdir/code_matrix.png"
-img_dir = "Simulator/testdir/output/"
-depth_path = "Simulator/testdir/output/depth0000.exr"
+base_dir = "Alacarte/testimg/"
+dbg_dir = os.path.join(base_dir, "debug")
+code_matrix_path = os.path.join(base_dir, "code_matrix.png")
+img_dir = os.path.join(base_dir, "output")
+depth_path = os.path.join(base_dir, "output", "depth0000.exr")
 
 codemat = normalize_image(cv2.imread(code_matrix_path)[:,:,0])
 

@@ -5,6 +5,7 @@ import torch
 from torch import nn as nn
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from SLPipeline.gen_pattern import PatternGenerator
 from SLPipeline.utils import ZNCC_torch
@@ -79,12 +80,12 @@ class AlacartePattern(PatternGenerator):
         self.mu = mu
         self.maxF = maxF
         self.defocus = defocus
-        self.rho = rho
-        
+        self.rho = rho        
         
         self.device = torch.device(device)
-        self.defocus_matrix = self.get_simple_defocus_kernel()
-        self.code_matrix = nn.Parameter(torch.rand((self.n_patterns, self.width))).to(self.device)  # (n_patterns, pat_width)
+        if self.defocus:
+            self.defocus_matrix = self.get_simple_defocus_kernel()
+        self.code_matrix = nn.Parameter(torch.rand((self.n_patterns, self.width)).to(self.device))  # (n_patterns, pat_width)
         self.optimizer = optim.Adam([self.code_matrix], 0.01)
 
         
@@ -93,8 +94,8 @@ class AlacartePattern(PatternGenerator):
             C = torch.matmul(self.code_matrix, self.defocus_matrix)
         else:
             C = self.code_matrix
-        # TODO: expand ambient's dim
-        return torch.transpose(torch.matmul(C, transport_matrix, ambient, noise), dim0=-2, dim1=-1)  # place the code at the last axis.
+        ret = torch.matmul(C, transport_matrix) + ambient + noise
+        return torch.transpose(ret, dim0=-2, dim1=-1)  # place the code at the last axis.
     
     def sample_conditions(self, n_samples):
         '''
@@ -102,12 +103,14 @@ class AlacartePattern(PatternGenerator):
         '''
         noise = torch.randn((n_samples, self.n_patterns, self.cam_w))
         ambient = torch.rand((n_samples, self.cam_w))
+        ambient = torch.unsqueeze(ambient, dim=1)
+        ambient = ambient.repeat(1, self.n_patterns, 1)
         # randomly generate direct-only T. first assign random stereo matched columns, which specifies the location of the only non-zero element in each column of T
         # then assign random values to those element.
         if self.G is None:
             off = torch.arange(self.cam_w)
             scale= (self.width - off) / self.width
-            matched_indices = torch.clip(torch.round(self.width * (torch.rand((n_samples, self.cam_w))) * scale + off), off, self.width)
+            matched_indices = torch.clip(torch.round(self.width * (torch.rand((n_samples, self.cam_w))) * scale + off), off, torch.tensor(self.width-1)).int()
             T = torch.zeros((n_samples, self.width, self.cam_w))
             T[:, matched_indices, off] = torch.rand((n_samples, self.cam_w))
         else:
@@ -121,9 +124,9 @@ class AlacartePattern(PatternGenerator):
         else:
             exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, self.code_matrix)))   # (n_samples, cam_w, pat_w)
         norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
-        aux_mat = torch.zeros((self.width, self.cam_w))
+        aux_mat = torch.zeros((self.width, self.cam_w)).to(self.device)
         for i in range(-self.tolerance, self.tolerance + 1):
-            aux_mat[..., torch.clip(matched_indices + i, 0, self.width), torch.arange(self.cam_w)] = 1
+            aux_mat[..., torch.clip(matched_indices + i, 0, self.width-1), torch.arange(self.cam_w)] = 1
         correct = torch.einsum('...ij, ji -> ...i', norm, aux_mat)
         correct = torch.sum(correct, dim=-1)
         expected_error = torch.sum(self.cam_w - correct) / n_samples
@@ -190,5 +193,11 @@ class AlacartePattern(PatternGenerator):
             err = self.compute_error(obs, eval_matched)
             return err
         
-    def save(self):
-        pass
+    def save(self, pt_path = None):
+        if pt_path is not None:
+            torch.save(self.code_matrix, pt_path)
+        code = self.code_matrix.detach().cpu()  # (n_patterns, pattern width)
+        patterns = code.unsqueeze(dim=1)
+        patterns: np.ndarray = patterns.repeat(1, self.height, 1).numpy()
+        self.save_all_to_dir(patterns, code.numpy())
+    

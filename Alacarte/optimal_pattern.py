@@ -183,6 +183,7 @@ class AlacartePattern(PatternGenerator):
             torch.clip_(self.code_matrix, 0, 1)
             if self.maxF is not None:
                 self.code_matrix = clip_frequencies(self.code_matrix, self.maxF)
+                torch.clip_(self.code_matrix, 0, 1)
 
     def evaluate(self):
         '''

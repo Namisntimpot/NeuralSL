@@ -1,5 +1,4 @@
 import os
-import logger
 import numpy as np
 import torch
 from torch import nn as nn
@@ -68,7 +67,7 @@ class GeometricConstraint:
 class AlacartePattern(PatternGenerator):
     def __init__(
             self, pat_width, pat_height, n_patterns, 
-            cam_width, tolerance, geom_constraints:GeometricConstraint, ambient_max = 0.1, mu=300,
+            cam_width, tolerance, geom_constraints:GeometricConstraint, ambient_max = 0.5, mu=300,
             output_dir=None, format='png', defocus = False, rho:int = None, maxF = None,
             device:str = 'cuda'
         ) -> None:
@@ -101,8 +100,9 @@ class AlacartePattern(PatternGenerator):
         '''
         return: matched_indices, direct-only T, ambient, noise
         '''
-        noise = torch.randn((n_samples, self.n_patterns, self.cam_w))
-        ambient = torch.rand((n_samples, self.cam_w))
+        noise = torch.normal(0, 0.01, size=(n_samples, self.n_patterns, self.cam_w))
+        # noise = torch.randn((n_samples, self.n_patterns, self.cam_w))
+        ambient = torch.rand((n_samples, self.cam_w)) * self.ambient_max
         ambient = torch.unsqueeze(ambient, dim=1)
         ambient = ambient.repeat(1, self.n_patterns, 1)
         # randomly generate direct-only T. first assign random stereo matched columns, which specifies the location of the only non-zero element in each column of T
@@ -110,7 +110,7 @@ class AlacartePattern(PatternGenerator):
         if self.G is None:
             off = torch.arange(self.cam_w)
             scale= (self.width - off) / self.width
-            matched_indices = torch.clip(torch.round(self.width * (torch.rand((n_samples, self.cam_w))) * scale + off), off, torch.tensor(self.width-1)).int()
+            matched_indices = torch.clip(torch.round(self.width * (torch.rand((n_samples, self.cam_w))) * scale + off), off, torch.tensor(self.width-1)).long()
             T = torch.zeros((n_samples, self.width, self.cam_w))
             T[:, matched_indices, off] = torch.rand((n_samples, self.cam_w))
         else:
@@ -119,6 +119,7 @@ class AlacartePattern(PatternGenerator):
 
     def compute_error(self, observation:torch.Tensor, matched_indices:torch.Tensor):
         n_samples = observation.shape[0]
+        # TODO: 只选取matched_indices的部分参与计算，从而实现算巨大的mu.
         if self.defocus:
             exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))))
         else:

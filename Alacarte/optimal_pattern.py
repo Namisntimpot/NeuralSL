@@ -88,10 +88,10 @@ class AlacartePattern(PatternGenerator):
         if self.defocus:
             self.defocus_matrix = self.get_simple_defocus_kernel()
         self.code_matrix = torch.rand((self.n_patterns, self.width)).to(self.device)  # (n_patterns, pat_width)
-        # 两级分化一下？
-        with torch.no_grad():
-            self.code_matrix = 1 / (1 + torch.exp(20 * (-self.code_matrix + 0.5)))
-        self.pattern_post_process()
+        # # 两级分化一下？
+        # with torch.no_grad():
+        #     self.code_matrix = 1 / (1 + torch.exp(20 * (-self.code_matrix + 0.5)))
+        # self.pattern_post_process()
         self.code_matrix = nn.Parameter(self.code_matrix)
         self.optimizer = optim.Adam([self.code_matrix], 0.01)
 
@@ -117,7 +117,7 @@ class AlacartePattern(PatternGenerator):
         # then assign random values to those element.
         if self.G is None:
             off = torch.arange(self.cam_w)
-            scale= (self.width - off) / self.width
+            scale= self.width - off
             matched_indices = torch.clip(torch.round(self.width * (torch.rand((n_samples, self.cam_w))) * scale + off), off, torch.tensor(self.width-1)).long()
             T = torch.zeros((n_samples, self.width, self.cam_w))
             T[:, matched_indices, off] = torch.rand((n_samples, self.cam_w))
@@ -127,38 +127,41 @@ class AlacartePattern(PatternGenerator):
 
     def compute_error(self, observation:torch.Tensor, matched_indices:torch.Tensor):
 
-        def compute_f_mu(mu, zncc:torch.Tensor, matched_indices:torch.Tensor):
-            camw_ind = torch.arange(self.cam_w).long().to(self.device).unsqueeze(dim=0).expand(zncc.shape[0], zncc.shape[1])  # (n_samples, cam_w)
-            samp_ind = torch.arange(zncc.shape[0]).long().to(self.device).unsqueeze(dim=-1).expand(zncc.shape[0], zncc.shape[1])  # (n_samples, cam_w)
-            matched_zncc = zncc[samp_ind, camw_ind, matched_indices].unsqueeze(dim=-1)  # (n_samples, cam_w, 1)
-            # print(matched_zncc[0])
-            # print(zncc[0, 0])
-            tmp = torch.exp(mu * (zncc - matched_zncc) + 1e-6)  # (n_samples, cam_w, pat_w)
-            return 1 / torch.sum(tmp, dim=-1)  # (n_samples, cam_w)
+        # def compute_f_mu(mu, zncc:torch.Tensor, matched_indices:torch.Tensor):
+        #     camw_ind = torch.arange(self.cam_w).long().to(self.device).unsqueeze(dim=0).expand(zncc.shape[0], zncc.shape[1])  # (n_samples, cam_w)
+        #     samp_ind = torch.arange(zncc.shape[0]).long().to(self.device).unsqueeze(dim=-1).expand(zncc.shape[0], zncc.shape[1])  # (n_samples, cam_w)
+        #     matched_zncc = zncc[samp_ind, camw_ind, matched_indices].unsqueeze(dim=-1)  # (n_samples, cam_w, 1)
+        #     # print(matched_zncc[0])
+        #     # print(zncc[0, 0])
+        #     tmp = torch.exp(mu * (zncc - matched_zncc) + 1e-6)  # (n_samples, cam_w, pat_w)
+        #     return 1 / torch.sum(tmp, dim=-1)  # (n_samples, cam_w)
         
         n_samples = observation.shape[0]
-        # TODO: 只选取matched_indices的部分参与计算，从而实现算巨大的mu.
-        # if self.defocus:
-        #     exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))))
-        # else:
-        #     exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, self.code_matrix)))   # (n_samples, cam_w, pat_w)
-        # norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
-        # aux_mat = torch.zeros((self.width, self.cam_w)).to(self.device)
-        # for i in range(-self.tolerance, self.tolerance + 1):
-        #     aux_mat[..., torch.clip(matched_indices + i, 0, self.width-1), torch.arange(self.cam_w)] = 1
-        # correct = torch.einsum('...ij, ji -> ...i', norm, aux_mat)
+        # use float64 to support big mu.
         if self.defocus:
-            zncc = ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))
+            exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))))
         else:
-            zncc = ZNCC_torch(observation, self.code_matrix)
-        correct = torch.zeros((n_samples)).to(self.device)
+            exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, self.code_matrix)))   # (n_samples, cam_w, pat_w)
+        norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
+        aux_mat = torch.zeros((self.width, self.cam_w)).to(self.device)
         for i in range(-self.tolerance, self.tolerance + 1):
-            matched = torch.clip(matched_indices + i, 0, self.width-1).long()
-            fmu = compute_f_mu(self.mu, zncc, matched)  # (n_samples, cam_w)
-            correct += fmu.sum(dim=-1)
-        print(correct)
-        correct = torch.sum(correct, dim=-1)
-        expected_error = torch.sum(self.cam_w - correct) / n_samples
+            aux_mat[..., torch.clip(matched_indices + i, 0, self.width-1), torch.arange(self.cam_w)] = 1
+        correct = torch.einsum('...ij, ji -> ...i', norm, aux_mat)
+        # print(correct[1])
+
+        # if self.defocus:
+        #     zncc = ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))
+        # else:
+        #     zncc = ZNCC_torch(observation, self.code_matrix)
+        # correct = torch.zeros((n_samples)).to(self.device)
+        # for i in range(-self.tolerance, self.tolerance + 1):
+        #     matched = torch.clip(matched_indices + i, 0, self.width-1).long()
+        #     fmu = compute_f_mu(self.mu, zncc, matched)  # (n_samples, cam_w)
+        #     correct += fmu.sum(dim=-1)
+        # # print(correct)
+        # correct = torch.sum(correct, dim=-1)
+        expected_correct = torch.sum(correct) / n_samples
+        expected_error = self.cam_w - expected_correct
         return expected_error
     
     def get_simple_defocus_kernel(self):

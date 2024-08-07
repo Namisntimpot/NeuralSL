@@ -10,6 +10,6 @@ alacarte = AlacartePattern(
     output_dir="./Alacarte/testimg", maxF=16, n_samples_for_eval=250,
     device='cuda'
 )
-alacarte.optimize(n_iters=300, logdir="./Alacarte/testlog")
+alacarte.optimize(n_iters=1000, logdir="./Alacarte/testlog")
 # alacarte.optimize(logdir="./Alacarte/testlog")
 alacarte.save()

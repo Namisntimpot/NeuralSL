@@ -99,3 +99,17 @@ def visualize_depth(depth: np.ndarray, vmin = 0, vmax = 4000, save_path:str = No
     else:
         plt.savefig(save_path)
     plt.close()
+
+
+def visualize_codematrix_similarity(codes:np.ndarray, save_path = None):
+    zncc = ZNCC(codes.T, codes)
+    plt.figure(figsize=(10, 6))
+    plt.imshow(zncc, cmap='viridis', vmin=-1, vmax=1)
+    plt.colorbar(label='Color Map')
+    plt.title('Codes Similarity')
+
+    if save_path is None:
+        plt.show()
+    else:
+        plt.savefig(save_path)
+    plt.close()

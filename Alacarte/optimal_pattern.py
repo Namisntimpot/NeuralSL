@@ -6,7 +6,7 @@ from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from SLPipeline.gen_pattern import PatternGenerator
+from SLPipeline.gen_pattern import PatternGenerator, SinPhaseShiftPattern
 from SLPipeline.utils import ZNCC_torch
 from .utils import *
 
@@ -92,8 +92,12 @@ class AlacartePattern(PatternGenerator):
         # with torch.no_grad():
         #     self.code_matrix = 1 / (1 + torch.exp(20 * (-self.code_matrix + 0.5)))
         # self.pattern_post_process()
+        # 使用正弦波图案初始化
+        # sin = SinPhaseShiftPattern(self.width, self.height, self.n_patterns, minF=16, maxF=16, n_shifts=self.n_patterns)
+        # _, codes = sin.gen_pattern(save=False)
+        # self.code_matrix.copy_(torch.from_numpy(codes))
         self.code_matrix = nn.Parameter(self.code_matrix)
-        self.optimizer = optim.Adam([self.code_matrix], 0.01)
+        self.optimizer = optim.Adam([self.code_matrix], 0.01, foreach=False)  # a torch bug in 2.1.0, fixed in 2.4.0, when using float64 as default dtype, foreach=false is needed.
 
         
     def transport(self, transport_matrix:torch.Tensor, ambient:torch.Tensor, noise:torch.Tensor):
@@ -116,11 +120,15 @@ class AlacartePattern(PatternGenerator):
         # randomly generate direct-only T. first assign random stereo matched columns, which specifies the location of the only non-zero element in each column of T
         # then assign random values to those element.
         if self.G is None:
+            # it assumes that the camera and the projector have the same intrinsic parameters.
             off = torch.arange(self.cam_w)
             scale= self.width - off
-            matched_indices = torch.clip(torch.round(self.width * (torch.rand((n_samples, self.cam_w))) * scale + off), off, torch.tensor(self.width-1)).long()
+            matched_indices = torch.clip(torch.round(torch.rand((n_samples, self.cam_w)) * scale + off), off, torch.tensor(self.width-1)).long()
             T = torch.zeros((n_samples, self.width, self.cam_w))
-            T[:, matched_indices, off] = torch.rand((n_samples, self.cam_w))
+            for i in range(n_samples):   # how to do this in one line?
+                a = torch.ones((self.cam_w)).long() * i
+                T[a, matched_indices[i], off] = torch.rand((self.cam_w))
+            # print(T[0, :, 0], '\n', matched_indices[0,0])
         else:
             raise NotImplementedError
         return matched_indices.to(self.device), T.to(self.device), ambient.to(self.device), noise.to(self.device)
@@ -143,10 +151,11 @@ class AlacartePattern(PatternGenerator):
         else:
             exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, self.code_matrix)))   # (n_samples, cam_w, pat_w)
         norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
-        aux_mat = torch.zeros((self.width, self.cam_w)).to(self.device)
+        aux_mat = torch.zeros((n_samples, self.width, self.cam_w)).to(self.device)
         for i in range(-self.tolerance, self.tolerance + 1):
-            aux_mat[..., torch.clip(matched_indices + i, 0, self.width-1), torch.arange(self.cam_w)] = 1
-        correct = torch.einsum('...ij, ji -> ...i', norm, aux_mat)
+            for j in range(n_samples):
+                aux_mat[torch.ones((self.cam_w)).long() * j, torch.clip(matched_indices[j] + i, 0, self.width-1), torch.arange(self.cam_w)] = 1
+        correct = torch.einsum('...ij, ...ji -> ...i', norm, aux_mat)
         # print(correct[1])
 
         # if self.defocus:

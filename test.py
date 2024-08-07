@@ -6,13 +6,14 @@ import cv2
 from SLPipeline.pipeline import SLPipeline
 from SLPipeline.utils import *
 
-base_dir = "Alacarte/testimg/"
+base_dir = "Alacarte/testimg/active/"
 dbg_dir = os.path.join(base_dir, "debug")
 code_matrix_path = os.path.join(base_dir, "code_matrix.png")
 img_dir = os.path.join(base_dir, "output")
 depth_path = os.path.join(base_dir, "output", "depth0000.exr")
-
+codemat = cv2.imread(code_matrix_path)[:,:,0]
 codemat = normalize_image(cv2.imread(code_matrix_path)[:,:,0])
+visualize_codematrix_similarity(codemat)
 
 img_filenames = sorted(os.listdir(img_dir))
 imgs = []

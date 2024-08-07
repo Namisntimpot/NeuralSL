@@ -5,9 +5,9 @@ import torch
 from Alacarte.optimal_pattern import AlacartePattern
 
 alacarte = AlacartePattern(
-    pat_width=800, pat_height=600, n_patterns=4, mu=50,
+    pat_width=800, pat_height=600, n_patterns=4, mu=300,
     cam_width=800, tolerance=0, geom_constraints=None,
-    output_dir="./Alacarte/testimg", maxF=16,
+    output_dir="./Alacarte/testimg", maxF=16, n_samples_for_eval=250,
     device='cuda'
 )
 alacarte.optimize(n_iters=300, logdir="./Alacarte/testlog")

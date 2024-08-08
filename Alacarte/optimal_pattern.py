@@ -87,7 +87,13 @@ class AlacartePattern(PatternGenerator):
         self.device = torch.device(device)
         if self.defocus:
             self.defocus_matrix = self.get_simple_defocus_kernel()
-        self.code_matrix = torch.rand((self.n_patterns, self.width)).to(self.device)  # (n_patterns, pat_width)
+        # random in freq domain:
+        self.initialize_codematrix()
+        #self.code_matrix = torch.rand((self.n_patterns, self.width)).to(self.device)  # (n_patterns, pat_width)
+        # self.code_matrix = torch.normal(0.5, 0.1, size=(self.n_patterns, self.width)).to(device)
+        # self.pattern_post_process()
+        # print(self.code_matrix)
+        # normal dist. initialize
         # # 两级分化一下？
         # with torch.no_grad():
         #     self.code_matrix = 1 / (1 + torch.exp(20 * (-self.code_matrix + 0.5)))
@@ -96,10 +102,25 @@ class AlacartePattern(PatternGenerator):
         # sin = SinPhaseShiftPattern(self.width, self.height, self.n_patterns, minF=16, maxF=16, n_shifts=self.n_patterns)
         # _, codes = sin.gen_pattern(save=False)
         # self.code_matrix.copy_(torch.from_numpy(codes))
-        self.code_matrix = nn.Parameter(self.code_matrix)
+        self.code_matrix = nn.Parameter(self.code_matrix.to(self.device))
         self.optimizer = optim.Adam([self.code_matrix], 0.01, foreach=False)  # a torch bug in 2.1.0, fixed in 2.4.0, when using float64 as default dtype, foreach=false is needed.
 
         
+    def initialize_codematrix(self):
+        with torch.no_grad():
+            random_phases = torch.exp(2j * torch.pi * torch.rand((self.n_patterns, self.width // 2 - 1)))
+            freq = torch.zeros((self.n_patterns, self.width), dtype=torch.complex128)
+            freq[:, 1:self.width//2] = random_phases
+            freq[:, self.width//2+1:] = torch.conj(random_phases)
+            freq[:, 0] = freq[:, self.width // 2] = 0
+            if self.maxF is not None:
+                freq[:, self.maxF+1:] = 0
+            self.code_matrix = torch.fft.ifft(freq).real
+            rows_min = self.code_matrix.min(dim=-1)[0].unsqueeze(dim=-1)
+            rows_max = self.code_matrix.max(dim=-1)[0].unsqueeze(dim=-1)
+            self.code_matrix = (self.code_matrix - rows_min) / (rows_max - rows_min)
+        
+    
     def transport(self, transport_matrix:torch.Tensor, ambient:torch.Tensor, noise:torch.Tensor):
         if self.defocus:
             C = torch.matmul(self.code_matrix, self.defocus_matrix)
@@ -150,13 +171,13 @@ class AlacartePattern(PatternGenerator):
             exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))))
         else:
             exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, self.code_matrix)))   # (n_samples, cam_w, pat_w)
+        # exp_zncc = torch.clip(exp_zncc, 1e-10, 1e10)
         norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
         aux_mat = torch.zeros((n_samples, self.width, self.cam_w)).to(self.device)
         for i in range(-self.tolerance, self.tolerance + 1):
             for j in range(n_samples):
                 aux_mat[torch.ones((self.cam_w)).long() * j, torch.clip(matched_indices[j] + i, 0, self.width-1), torch.arange(self.cam_w)] = 1
         correct = torch.einsum('...ij, ...ji -> ...i', norm, aux_mat)
-        # print(correct[1])
 
         # if self.defocus:
         #     zncc = ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))
@@ -225,8 +246,10 @@ class AlacartePattern(PatternGenerator):
             torch.clip_(self.code_matrix, 0, 1)
             if self.maxF is not None:
                 tmp_code_mat = clip_frequencies(self.code_matrix, self.maxF)  # Caution! the ret's requires_grad is False! because torch.no_grad() is used.
-                torch.clip_(tmp_code_mat, 0, 1)
-                self.code_matrix.copy_(tmp_code_mat)
+                #torch.clip_(tmp_code_mat, 0, 1)
+                rows_min = tmp_code_mat.min(dim=-1)[0].unsqueeze(-1)
+                rows_max = tmp_code_mat.max(dim=-1)[0].unsqueeze(-1)
+                self.code_matrix.copy_((tmp_code_mat - rows_min) / (rows_max - rows_min))
         return
 
     def evaluate(self):

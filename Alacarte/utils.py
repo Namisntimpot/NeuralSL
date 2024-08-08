@@ -8,7 +8,8 @@ def clip_frequencies(t:torch.Tensor, max_f):
         return t
     freq_domain = torch.fft.fft(t, dim=1)
     freq_domain[:, max_f+1 : ] = 0
-    return torch.fft.ifft(freq_domain, dim=1).real  # must .real! although the imag is always 0
+    ifft = torch.fft.ifft(freq_domain, dim=1)
+    return ifft.real
 
     # h, w = t.shape
     # freq_domain = torch.fft.fft2(t)
@@ -27,8 +28,20 @@ def clip_frequencies(t:torch.Tensor, max_f):
     
 
 if __name__ == '__main__':
-    a = np.random.rand(800)
-    f = np.fft.fft(a)
-    # f[4:] = 0
-    b = np.fft.ifft(f)
-    print(b)
+    import matplotlib.pyplot as plt
+    n = 800
+    random_phases = np.exp(2j * np.pi * np.random.rand(n // 2 - 1))
+    freq = np.zeros((n), dtype=np.complex64)
+    freq[1:n//2] = random_phases
+    freq[n//2+1:] = np.conj(random_phases)
+    freq[0] = freq[n//2] = 0
+
+    freq[17:] = 0
+    
+    t = np.fft.ifft(freq).real
+    t = (t - t.min()) / (t.max() - t.min())
+
+    x = np.arange(n)
+    plt.plot(x, t)
+    plt.show()
+    print(t)

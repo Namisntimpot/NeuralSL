@@ -67,7 +67,7 @@ class GeometricConstraint:
 class AlacartePattern(PatternGenerator):
     def __init__(
             self, pat_width, pat_height, n_patterns, 
-            cam_width, tolerance, geom_constraints:GeometricConstraint, ambient_max = 0.5, mu=300,
+            cam_width, tolerance, geom_constraints:GeometricConstraint, ambient_max = 0.1, mu=300,
             output_dir=None, format='png', defocus = False, rho:int = None, maxF = None, n_samples_for_eval = 500,
             device:str = 'cuda'
         ) -> None:
@@ -103,22 +103,24 @@ class AlacartePattern(PatternGenerator):
         # _, codes = sin.gen_pattern(save=False)
         # self.code_matrix.copy_(torch.from_numpy(codes))
         self.code_matrix = nn.Parameter(self.code_matrix.to(self.device))
-        self.optimizer = optim.Adam([self.code_matrix], 0.01, foreach=False)  # a torch bug in 2.1.0, fixed in 2.4.0, when using float64 as default dtype, foreach=false is needed.
+        self.optimizer = optim.Adam([self.code_matrix], 0.1, foreach=False)  # a torch bug in 2.1.0, fixed in 2.4.0, when using float64 as default dtype, foreach=false is needed.
 
         
     def initialize_codematrix(self):
         with torch.no_grad():
-            random_phases = torch.exp(2j * torch.pi * torch.rand((self.n_patterns, self.width // 2 - 1)))
-            freq = torch.zeros((self.n_patterns, self.width), dtype=torch.complex128)
-            freq[:, 1:self.width//2] = random_phases
-            freq[:, self.width//2+1:] = torch.conj(random_phases)
-            freq[:, 0] = freq[:, self.width // 2] = 0
-            if self.maxF is not None:
-                freq[:, self.maxF+1:] = 0
-            self.code_matrix = torch.fft.ifft(freq).real
-            rows_min = self.code_matrix.min(dim=-1)[0].unsqueeze(dim=-1)
-            rows_max = self.code_matrix.max(dim=-1)[0].unsqueeze(dim=-1)
-            self.code_matrix = (self.code_matrix - rows_min) / (rows_max - rows_min)
+            # random_phases = torch.exp(2j * torch.pi * torch.rand((self.n_patterns, self.width // 2 - 1)))
+            # freq = torch.zeros((self.n_patterns, self.width), dtype=torch.complex128)
+            # freq[:, 1:self.width//2] = random_phases
+            # freq[:, self.width//2+1:] = torch.conj(random_phases)
+            # freq[:, 0] = freq[:, self.width // 2] = 0
+            # if self.maxF is not None:
+            #     freq[:, self.maxF+1:] = 0
+            # self.code_matrix = torch.fft.ifft(freq).real
+            # rows_min = self.code_matrix.min(dim=-1)[0].unsqueeze(dim=-1)
+            # rows_max = self.code_matrix.max(dim=-1)[0].unsqueeze(dim=-1)
+            # self.code_matrix = (self.code_matrix - rows_min) / (rows_max - rows_min)
+            # self.code_matrix = torch.ones((self.n_patterns, self.width)) * 0.5
+            self.code_matrix = torch.rand((self.n_patterns, self.width))
         
     
     def transport(self, transport_matrix:torch.Tensor, ambient:torch.Tensor, noise:torch.Tensor):
@@ -170,7 +172,8 @@ class AlacartePattern(PatternGenerator):
         if self.defocus:
             exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))))
         else:
-            exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, self.code_matrix)))   # (n_samples, cam_w, pat_w)
+            # zncc = ZNCC_torch(observation, self.code_matrix)
+            exp_zncc = torch.exp(self.mu * ZNCC_torch(observation, self.code_matrix))   # (n_samples, cam_w, pat_w)
         # exp_zncc = torch.clip(exp_zncc, 1e-10, 1e10)
         norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
         aux_mat = torch.zeros((n_samples, self.width, self.cam_w)).to(self.device)

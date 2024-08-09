@@ -26,8 +26,8 @@ def ZNCC(a:np.ndarray, b:np.ndarray):
 #     return ret
 
 def ZNCC_torch(a:torch.Tensor, b:torch.Tensor):
-    za = a - torch.mean(a, dim=-1, keepdim=True)
-    zb = b - torch.mean(b, dim=-2, keepdim=True)
+    za = a - torch.mean(a, dim=-1, keepdim=True) + 1e-6
+    zb = b - torch.mean(b, dim=-2, keepdim=True) + 1e-6
     l2_za = torch.sqrt(torch.sum(za ** 2, dim=-1, keepdim=True))
     l2_zb = torch.sqrt(torch.sum(zb ** 2, dim=-2, keepdim=True))
     return torch.einsum("...pk, ...kq -> ...pq", za / l2_za, zb / l2_zb)

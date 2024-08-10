@@ -11,20 +11,20 @@ def clip_frequencies(t:torch.Tensor, max_f):
     ifft = torch.fft.ifft(freq_domain, dim=1)
     return ifft.real
 
-    # h, w = t.shape
-    # freq_domain = torch.fft.fft2(t)
-    # freq_domain_shifted = torch.fft.fftshift(freq_domain)
-    # ch, cw = h // 2, w // 2
-    # rows_ind, cols_ind = torch.arange(h), torch.arange(w)
-    # x, y = torch.meshgrid(rows_ind, cols_ind, indexing='ij')   # np.mgrid[:h, :w]
-    # x = x.to(t.device)
-    # y = y.to(t.device)
-    # mask = (x-ch)**2 + (y-cw)**2 > max_f * max_f
-    # freq_domain_shifted[mask] = 0
-    # freq_filtered = torch.fft.fftshift(freq_domain_shifted)
-    # return torch.fft.ifft2(freq_filtered)
-    # freq_domain[freq_domain > max_f] = 0
-    # return torch.fft.ifft2(freq_domain).real   
+def freq_domain_random_init(height, width, maxF = None):
+    random_phases = torch.exp(2j * torch.pi * torch.rand((height, width // 2 - 1)))
+    freq = torch.zeros((height, width), dtype=torch.complex128)
+    freq[:, 1:width//2] = random_phases
+    freq[:, width//2+1:] = torch.conj(random_phases)
+    freq[:, 0] = freq[:, width // 2] = 0
+    if maxF is not None:
+        freq[:, maxF+1:] = 0
+    arr = torch.fft.ifft(freq).real
+    rows_min = arr.min(dim=-1)[0].unsqueeze(dim=-1)
+    rows_max = arr.max(dim=-1)[0].unsqueeze(dim=-1)
+    # to [0, 1]
+    arr = (arr - rows_min) / (rows_max - rows_min)
+    return arr
     
 
 if __name__ == '__main__':

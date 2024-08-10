@@ -4,12 +4,13 @@ import cv2
 
 # 只考虑黑白...
 class PatternGenerator:
-    def __init__(self, width, height, n_patterns = None, output_dir = None, format = 'png') -> None:
+    def __init__(self, width, height, n_patterns = None, output_dir = None, format = 'png', save_codemat_same_dir = False) -> None:
         self.width = width
         self.height = height
         self.n_patterns = n_patterns
         self.output_dir = output_dir
         self.format = format
+        self.save_codemat_same_dir = save_codemat_same_dir
         
     def gen_pattern(self, save = True):
         '''
@@ -22,7 +23,7 @@ class PatternGenerator:
         for i in range(len(patterns)):
             pat = patterns[i]
             self.save_to_dir(pat, i)
-        self.save_to_dir(codematrix, 'code matrix')
+        self.save_to_dir(codematrix, 'code_matrix')
 
     def save_to_dir(self, img:np.ndarray, index:int | str):
         '''
@@ -36,7 +37,11 @@ class PatternGenerator:
         if not os.path.exists(self.output_dir):
             os.mkdir(self.output_dir)
         if type(index) == str:
-            cv2.imwrite(os.path.join(self.output_dir, "code_matrix."+self.format), normalized)
+            if self.save_codemat_same_dir:
+                codedir = self.output_dir
+            else:
+                codedir = os.path.dirname(self.output_dir)
+            cv2.imwrite(os.path.join(codedir, "code_matrix."+self.format), normalized)
         else:
             cv2.imwrite(os.path.join(self.output_dir, "%04d."%(index) + self.format), normalized)
 
@@ -68,7 +73,7 @@ class SinPhaseShiftPattern(PatternGenerator):
     
 
 def main():
-    sin_pattern = SinPhaseShiftPattern(800, 600, output_dir="./phase_shift_pattrns", format="png", minF=1, maxF=8, n_shifts=4)
+    sin_pattern = SinPhaseShiftPattern(800, 600, output_dir="./Alacarte/testimg/patterns", format="png", minF=4, maxF=4, n_shifts=4)
     patterns, code_matrix = sin_pattern.gen_pattern()
     print(len(patterns))
     print(code_matrix.shape)

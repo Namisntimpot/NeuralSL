@@ -9,21 +9,12 @@ def ZNCC(a:np.ndarray, b:np.ndarray):
     b: (..., w_pat, k), pattern code matrix.
     the result (h, p, q) means ZNCC(pixel(h, p), code(q))
     '''
-    za = a - np.mean(a, axis=-1, keepdims=True)
-    zb = b - np.mean(b, axis=-2, keepdims=True)
+    za = a - np.mean(a, axis=-1, keepdims=True) + 1e-6
+    zb = b - np.mean(b, axis=-2, keepdims=True) + 1e-6
     l2_za = np.sqrt(np.sum(za ** 2, axis=-1, keepdims=True))
     l2_zb = np.sqrt(np.sum(zb ** 2, axis=-2, keepdims=True))
     return np.einsum("...pk, ...kq -> ...pq", za / l2_za, zb / l2_zb)
-#     '''
-#     the code vector should be at the last dim.
-#     assuming a is the image code arrays (h, p, k), b is the pattern's code matrix (q, k), then the result (h, p, q) means ZNCC(pixel(h, p), code(q))
-#     '''
-#     za = a - np.mean(a, axis=-1, keepdims=True)
-#     zb = b - np.mean(b, axis=-1, keepdims=True)
-#     l2_za = np.sqrt(np.sum(za ** 2, axis=-1, keepdims=True))
-#     l2_zb = np.sqrt(np.sum(zb ** 2, axis=-1, keepdims=True))
-#     ret = np.einsum("...pk, ...qk -> ...pq", za / l2_za, zb / l2_zb)
-#     return ret
+
 
 def ZNCC_torch(a:torch.Tensor, b:torch.Tensor):
     za = a - torch.mean(a, dim=-1, keepdim=True) + 1e-6

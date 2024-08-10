@@ -5,6 +5,7 @@ from torch import nn as nn
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import cv2
 
 from SLPipeline.gen_pattern import PatternGenerator, SinPhaseShiftPattern
 from SLPipeline.utils import ZNCC_torch
@@ -87,39 +88,13 @@ class AlacartePattern(PatternGenerator):
         self.device = torch.device(device)
         if self.defocus:
             self.defocus_matrix = self.get_simple_defocus_kernel()
-        # random in freq domain:
         self.initialize_codematrix()
-        #self.code_matrix = torch.rand((self.n_patterns, self.width)).to(self.device)  # (n_patterns, pat_width)
-        # self.code_matrix = torch.normal(0.5, 0.1, size=(self.n_patterns, self.width)).to(device)
-        # self.pattern_post_process()
-        # print(self.code_matrix)
-        # normal dist. initialize
-        # # 两级分化一下？
-        # with torch.no_grad():
-        #     self.code_matrix = 1 / (1 + torch.exp(20 * (-self.code_matrix + 0.5)))
-        # self.pattern_post_process()
-        # 使用正弦波图案初始化
-        # sin = SinPhaseShiftPattern(self.width, self.height, self.n_patterns, minF=16, maxF=16, n_shifts=self.n_patterns)
-        # _, codes = sin.gen_pattern(save=False)
-        # self.code_matrix.copy_(torch.from_numpy(codes))
         self.code_matrix = nn.Parameter(self.code_matrix.to(self.device))
-        self.optimizer = optim.Adam([self.code_matrix], 0.1, foreach=False)  # a torch bug in 2.1.0, fixed in 2.4.0, when using float64 as default dtype, foreach=false is needed.
+        self.optimizer = optim.Adam([self.code_matrix], 0.01, foreach=False)  # a torch bug in 2.1.0, fixed in 2.4.0, when using float64 as default dtype, foreach=false is needed.
 
         
     def initialize_codematrix(self):
         with torch.no_grad():
-            # random_phases = torch.exp(2j * torch.pi * torch.rand((self.n_patterns, self.width // 2 - 1)))
-            # freq = torch.zeros((self.n_patterns, self.width), dtype=torch.complex128)
-            # freq[:, 1:self.width//2] = random_phases
-            # freq[:, self.width//2+1:] = torch.conj(random_phases)
-            # freq[:, 0] = freq[:, self.width // 2] = 0
-            # if self.maxF is not None:
-            #     freq[:, self.maxF+1:] = 0
-            # self.code_matrix = torch.fft.ifft(freq).real
-            # rows_min = self.code_matrix.min(dim=-1)[0].unsqueeze(dim=-1)
-            # rows_max = self.code_matrix.max(dim=-1)[0].unsqueeze(dim=-1)
-            # self.code_matrix = (self.code_matrix - rows_min) / (rows_max - rows_min)
-            # self.code_matrix = torch.ones((self.n_patterns, self.width)) * 0.5
             self.code_matrix = torch.rand((self.n_patterns, self.width))
         
     
@@ -129,6 +104,9 @@ class AlacartePattern(PatternGenerator):
         else:
             C = self.code_matrix
         ret = torch.matmul(C, transport_matrix) + ambient + noise
+        # max_ind = transport_matrix[0,:,0].max(dim=0)[1]
+        # tmp = torch.dot(C[0,:], transport_matrix[0, :, 0]) + ambient[0,0,0] + noise[0,0,0]
+        # print(max_ind, ret[0,:,0], tmp)
         return torch.transpose(ret, dim0=-2, dim1=-1)  # place the code at the last axis.
     
     def sample_conditions(self, n_samples):
@@ -136,7 +114,6 @@ class AlacartePattern(PatternGenerator):
         return: matched_indices, direct-only T, ambient, noise
         '''
         noise = torch.normal(0, 0.01, size=(n_samples, self.n_patterns, self.cam_w))
-        # noise = torch.randn((n_samples, self.n_patterns, self.cam_w))
         ambient = torch.rand((n_samples, self.cam_w)) * self.ambient_max
         ambient = torch.unsqueeze(ambient, dim=1)
         ambient = ambient.repeat(1, self.n_patterns, 1)
@@ -150,8 +127,7 @@ class AlacartePattern(PatternGenerator):
             T = torch.zeros((n_samples, self.width, self.cam_w))
             for i in range(n_samples):   # how to do this in one line?
                 a = torch.ones((self.cam_w)).long() * i
-                T[a, matched_indices[i], off] = torch.rand((self.cam_w))
-            # print(T[0, :, 0], '\n', matched_indices[0,0])
+                T[a, matched_indices[i], off] = torch.rand((self.cam_w)) * 0.2 + 0.8
         else:
             raise NotImplementedError
         return matched_indices.to(self.device), T.to(self.device), ambient.to(self.device), noise.to(self.device)
@@ -191,7 +167,6 @@ class AlacartePattern(PatternGenerator):
         #     matched = torch.clip(matched_indices + i, 0, self.width-1).long()
         #     fmu = compute_f_mu(self.mu, zncc, matched)  # (n_samples, cam_w)
         #     correct += fmu.sum(dim=-1)
-        # # print(correct)
         # correct = torch.sum(correct, dim=-1)
         expected_correct = torch.sum(correct) / n_samples
         expected_error = self.cam_w - expected_correct
@@ -221,7 +196,6 @@ class AlacartePattern(PatternGenerator):
             # (n_samples, cam_w), (n_samples, pat_w, cam_w), (n_samples, cam_w), (n_samples, n_patterns, cam_w)
             observations = self.transport(samples_T, samples_ambient, samples_noise)
             error = self.compute_error(observations, samples_matched_indices)
-            # print(self.code_matrix.requires_grad)
             self.optimizer.zero_grad()
             error.backward()
             self.optimizer.step()

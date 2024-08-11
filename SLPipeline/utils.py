@@ -104,3 +104,14 @@ def visualize_codematrix_similarity(codes:np.ndarray, save_path = None):
     else:
         plt.savefig(save_path)
     plt.close()
+
+
+def visualize_codematrix(codes:np.ndarray, save_path = None):
+    k, w = codes.shape
+    h = k * 100
+    vis = np.zeros((h, w), dtype=codes.dtype)
+    for i in range(k):
+        vis[i*100 : (i+1)*100, :] = vis[i, :]
+    if save_path is not None:
+        cv2.imwrite(save_path, vis)
+    return vis

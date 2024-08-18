@@ -1,6 +1,7 @@
 import bpy
 import os
 import sys
+import argparse
 
 # 确保Blender可以找到其他脚本文件
 SLRendererDir = "D:\\Lijiaheng\\NeuralSL\\Simulator\\SLRenderer"
@@ -147,3 +148,16 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--render", action="store_true")
+    parser.add_argument("--pattern-dir", type=str, default="")
+    parser.add_argument("--output-dir", type=str, default="")
+    
+    args, _ = parser.parse_known_args()
+    if args.render:
+        if args.pattern_dir != "":
+            bpy.context.scene.slrenderer_settings.pattern_dir_path = args.pattern_dir
+        if args.output_dir != "":
+            bpy.context.scene.slrenderer_settings.output_dir_path = args.output_dir
+        bpy.ops.slrenderer.export()
+    print("Done")

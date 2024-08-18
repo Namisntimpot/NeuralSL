@@ -1,0 +1,12 @@
+{
+    "blender":{
+        "blender_exe_path": "D:/Software/blender/blender.exe",
+        "blender_cwd": "D:/Lijiaheng/NeuralSL/Simulator",
+        "blender_scene_path": "./SimulateSL.blend",
+        "blender_output_dir": "../OpticalSGD/testimg/active/output/",
+        "blender_script_path": "./SLRenderer/SLrenderer.py"
+    },
+    "output_base_dir": "OpticalSGD/testimg/active/",
+    "output_pattern_dir": "patterns/",
+    "output_render_dir": "output/"
+}

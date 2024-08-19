@@ -8,5 +8,11 @@
     },
     "output_base_dir": "OpticalSGD/testimg/active/",
     "output_pattern_dir": "patterns/",
-    "output_render_dir": "output/"
+    "output_render_dir": "output/",
+
+    "log_dir":"OpticalSGD/testlog/",
+
+    "w_cam": 224,
+    "h_cam": 224,
+    "w_pat": 224
 }

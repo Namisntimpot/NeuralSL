@@ -19,6 +19,10 @@ class PatternGenerator:
         if save:
             assert self.output_dir is not None
 
+    def codematrix2patterns(self, codemat:np.ndarray):
+        mat = np.expand_dims(codemat, axis=1)  # (n_patterns, 1, w)
+        return mat.repeat(self.height, 1)
+
     def save_all_to_dir(self, patterns:list[np.ndarray], codematrix:np.ndarray):
         for i in range(len(patterns)):
             pat = patterns[i]

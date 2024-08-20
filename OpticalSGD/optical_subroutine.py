@@ -11,13 +11,16 @@ from SLPipeline.gen_pattern import PatternGenerator
 
 class ImagingFunction(torch.autograd.Function):
     forward_image : torch.Tensor = None
-    backward_grad : torch.Tensor = None
+    backward_jacobian : torch.Tensor = None  # (h_img, w_img, w_pat, k)
     @staticmethod
-    def forward(ctx, input, filter, bias, padding, stride):
-        ctx.save_for_backward(input, filter, bias)
+    def forward(ctx, input):
+        return ImagingFunction.forward_image
 
     @staticmethod
     def backward(ctx, grad_output):
+        # grad_output的shape是什么? 感觉就是 (h_img, w_img, w_img, k).. ?
+        # 之后打印一下，然后矩阵相乘...
+        
         pass
 
     @staticmethod
@@ -54,16 +57,30 @@ class ImagingFunction(torch.autograd.Function):
         pat_path = render_proc.get_pattern_path()
         pattern_saver = PatternGenerator(w_pat, h_pat, k, pat_path)
         ori_image = ImagingFunction.forward_image  # (h, w, k)
-        J = torch.zeros((w_pat, w_img, k))
+        J = torch.zeros((h_img, w_img, w_pat, k))  # (将h_img当成batch_size)
+        blk_num = w_pat / B
+        blk_rest = w_pat % B
         with torch.no_grad():
-            for a in ImagingFunction.jacobian_schedule(B, w_pat, k):
+            for i, a, ind in ImagingFunction.jacobian_schedule(B, w_pat, k):
                 pat = pattern + a*h
                 pats = pattern_saver.codematrix2patterns(pat.detach().cpu().numpy())
                 pattern_saver.save_all_to_dir(pats, pat)
                 img = ImagingFunction.imaging(render_proc)
                 d_a = (img - ori_image) / h   # (h_img, w_img, k)
-                # 这样的d_a算出了几列（l1, l2, ... lt）的J之和，假设这些列的每行里只有一个不为0..?
-        pass
+                # 这样的d_a算出了几列（l1, l2, ... lt）的J之和，假设这些列的每行里只有一个不为0...
+                if i < blk_rest:
+                    n_blks = blk_num + 1
+                else:
+                    n_blks = blk_num
+                # ind = ind.unsqueeze(dim=0).repeat(w_img, 1)  # (w_img, n_blks), d_a 的第w_img列是J的ind[w_img, :]列之和
+                # for h in range(h_img):
+                #     choice = torch.randint(0, n_blks, size=(w_img))
+                #     J[torch.ones((w_img)) * h, torch.arange(w_img), choice] = d_a[h]
+                ind = ind.unsqueeze(dim=0).unsqueeze(dim=0).repeat(h_img, w_img, 1)  # (h_img, w_img, n_blks)
+                choice = torch.randint(0, n_blks, (h_img, w_img))
+                J[torch.arange(h_img).unsqueeze(-1).repeat(1, w_img), torch.arange(w_img).unsqueeze(0).repeat(h_img, 1), choice] = d_a
+        ImagingFunction.backward_jacobian = J
+
 
     @staticmethod
     def jacobian_schedule(B, N, K):
@@ -73,10 +90,9 @@ class ImagingFunction(torch.autograd.Function):
         K: the number of patterns  \\
         h: a small value
         '''
-        stride = N // B
         r = N % B
         for i in range(B):
             a = torch.zeros((K, N))
-            ind = torch.arange(i, N, stride)
+            ind = torch.arange(i, N, B)
             a[:, ind] = 1
-            yield a
+            yield i, a, ind

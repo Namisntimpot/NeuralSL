@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 def ZNCC(a:np.ndarray, b:np.ndarray):
     '''
     a: (..., h, w_img, k), image code array.
-    b: (..., w_pat, k), pattern code matrix.
+    b: (k, w_pat), pattern code matrix.
     the result (h, p, q) means ZNCC(pixel(h, p), code(q))
     '''
     za = a - np.mean(a, axis=-1, keepdims=True) + 1e-6

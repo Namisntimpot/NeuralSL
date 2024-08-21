@@ -31,13 +31,13 @@ class SLPipeline:
         assert len(images) == self.code_matrix.shape[0]
         return np.stack(images, axis=-1)
     
-    def match(self, image_code_array:np.ndarray):
+    def match(self, image_code_array:np.ndarray, sim_func = ZNCC):
         '''
         match the code array of each pixel with the columns in the projector's code matrix.
         this function use the default ZNCC decorder, i.e. it finds the column that maximize the ZNCC value.
         return: (h, w), the matched column's index of each pixel
         '''
-        zncc = ZNCC(image_code_array, self.code_matrix)
+        zncc = sim_func(image_code_array, self.code_matrix)
         return np.argmax(zncc, axis=-1)
     
     def get_depth(self, matched_indices:np.ndarray):

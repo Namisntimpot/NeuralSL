@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from SLPipeline.utils import ZNCC, ZNCC_torch
 
-def ZNCC_p(a:torch.Tensor, b:torch.Tensor, p):
+def expand_p_neighbor(a:np.ndarray, b:np.ndarray, p:int):
     '''
     a: (..., w_cam, k), camera's code array
     b: (k, w_pat), projector's code matrix
@@ -32,16 +32,24 @@ def ZNCC_p(a:torch.Tensor, b:torch.Tensor, p):
             b_arr.append(b_tmp)
         ap = torch.cat(a_arr, dim=-1)
         bp = torch.cat(b_arr, dim=-2)
+    return ap, bp
+
+
+def ZNCC_p(a:torch.Tensor, b:torch.Tensor, p):
+    '''
+    a: (..., w_cam, k), camera's code array
+    b: (k, w_pat), projector's code matrix
+    p: p-neighbor, perferably an odd number
+    '''
+    ap, bp = expand_p_neighbor(a, b, p)
     return ZNCC_torch(ap, bp)
     
 
 class ZNCC_NN(nn.Module):
-    def __init__(self, p, n_pat, n_layers = 2, n_g_segments = 32) -> None:
+    def __init__(self, p, n_pat, n_layers = 2) -> None:
         super().__init__()
         self.p = p
         self.n_pat = n_pat
-        self.n_g_segs = n_g_segments
-        self.param_g = nn.Parameter(torch.arange(0, n_g_segments+1) / n_g_segments)  # g函数的参数是前序和
         n_feat = p * n_pat
         self.F_proj = nn.Sequential(
             *[Block(n_feat, n_feat) for _ in range(n_layers)]
@@ -49,15 +57,19 @@ class ZNCC_NN(nn.Module):
         self.F_cam = nn.Sequential(
             *[Block(n_feat, n_feat) for _ in range(n_layers)]
         )
-
-    def g_function(self, x:torch.Tensor):
-        x_coords = torch.arange(0, self.n_g_segs) / self.n_g_segs
-        # 先找到那个恰好比x小的节点
-        with torch.no_grad():
-            delta = torch.abs(x_coords - x.unsqueeze(-1))
-            _, ind = delta.min(dim=-1)  # ind的shape应该是(h_cam, w_cam, k)
-        aux = torch.zeros_like(x.unsqueeze(-1).repeat_interleave(self.n_g_segs, -1))
-        
+    
+    def forward(self, cam_code:torch.Tensor, proj_code:torch.Tensor, argmax=False):
+        '''
+        cam_code: (h_img, w_img, k), camera's code array
+        proj_code: (k, w_pat), what the projector projects
+        '''
+        p_cam_code, p_g_proj_code = expand_p_neighbor(cam_code, proj_code, self.p)  # (h_img, w_img, k*p), (k*p, w_pat)
+        F_p_cam_code = self.F_cam(p_cam_code)  # (h_img, w_img, k*p)
+        F_p_g_proj_code = self.F_proj(p_g_proj_code.T).T  # (k*p, w_pat)
+        zncc = ZNCC_torch(F_p_cam_code, F_p_g_proj_code)  # (h_img, w_img, w_pat)
+        if argmax:
+            return torch.max(zncc, dim=-1)[1]  # (h_img, w_img), 返回与哪个列匹配成功.
+        return zncc
         
 
 

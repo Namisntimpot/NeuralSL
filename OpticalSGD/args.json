@@ -3,17 +3,37 @@
         "blender_exe_path": "D:/Software/blender/blender.exe",
         "blender_cwd": "D:/Lijiaheng/NeuralSL/Simulator",
         "blender_scene_path": "./SimulateSL.blend",
-        "blender_output_dir": "../OpticalSGD/testimg/active/output/",
+        "blender_output_path": "../OpticalSGD/testimg/active/output/",
         "blender_script_path": "./SLRenderer/SLrenderer.py"
     },
     "output_base_dir": "OpticalSGD/testimg/active/",
     "output_pattern_dir": "patterns/",
     "output_render_dir": "output/",
 
+    "hardware_config": "...",
+
     "log_dir":"OpticalSGD/testlog/",
 
     "w_cam": 224,
     "h_cam": 224,
     "w_pat": 224,
-    "h_pat": 224
+    "h_pat": 224,
+    "n_pat": 4,
+    "maxF": 128,
+    "softmax_tau": 200,
+    "Jimg_update": 15,
+    "Jimg_B": 7,
+    "Jimg_h": 0.15,
+
+    "proj_n_g":32,
+    "decoder_n_layers":2,
+    "decoder_p": 5,
+
+    "minibatch_rate": 0.15,
+    "lr": 0.001,
+    "lr_decay": [0.5, 350],
+    "re_gt":50,
+
+    "n_iters": 1000,
+    "device": "cuda"
 }

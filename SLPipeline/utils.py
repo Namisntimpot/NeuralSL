@@ -52,6 +52,38 @@ def compute_blender_projector_intrinsic(reso_x, reso_y, scale_x, scale_y):
         ]
     )
 
+def compute_coresponding_from_depth(depth_map:np.ndarray, cam_intri:np.ndarray, proj_intri:np.ndarray, R:np.ndarray, T:np.ndarray):
+    '''
+    with the real depth map (in mm), camera and projector's intrisic matrix known, compute the real coresponding map.  
+    R:  the rotation matrix of the camera relative to the projector, (3, 3)
+    T:  the translation vector of the camera relative to the projector, (3) (in mm)
+    it's a re-projection process.  
+    the depth here is defined as the projected distance along the z-axis, rather than the distance from the camera's optical center to the object point.
+    '''
+    h, w = depth_map.shape
+    y, x = np.mgrid[:h, :w]
+    # camera's pixel coordinates
+    pixel_coord_cam = np.stack([x, y, np.ones_like(x)], axis=-1)  # (h, w, 3)
+    cam_intri_inv = np.linalg.inv(cam_intri)  # (3, 3)
+    space_coord_cam = np.einsum("mk, hwk -> hwm", cam_intri_inv, pixel_coord_cam * depth_map[:,:,np.newaxis].repeat(3, axis=-1))
+    space_coord_cam_ho = np.stack([space_coord_cam, np.ones_like(space_coord_cam[:,:,:1])] , axis=-1)  # (h, w, 4)
+    trans = RT2TransformMatrix(R, T, want='3x4')
+    space_coord_proj = np.einsum("jk, hwk -> hwj", trans, space_coord_cam_ho)  # (h, w, 3)
+    pixel_coord_proj = np.einsum("jk, hwk -> hwm", proj_intri, space_coord_proj) / space_coord_proj[...,2:3]  # (h, w, 3)
+    # y坐标是匹配到的结果.
+    return pixel_coord_proj[...,1]
+
+def RT2TransformMatrix(R:np.ndarray, T:np.ndarray, want:str = '3x4'):
+    '''
+    return [R, T // 0, 1]
+    '''
+    m3x4 = np.concatenate([R, T[:, np.newaxis]], axis=-1)
+    if want == '3x4':
+        return m3x4
+    else:
+        m4x4 = np.concatenate([m3x4, np.array([[0, 0, 0, 1]])], axis=0)
+        return m4x4
+
 
 def normalize_image(img:np.ndarray, bit_depth: int = 8):
     max_val = 2 ** bit_depth - 1

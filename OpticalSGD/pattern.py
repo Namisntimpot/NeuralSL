@@ -22,7 +22,14 @@ class OpticalSGDPattern(PatternGenerator, nn.Module):
     def initialize_pattern(self):
         return torch.rand((self.n_patterns, self.width)) * 0.1 + 0.45  # (uniform random between 0.45 and 0.55)
     
-    def get_pattern(self):
+    def gen_pattern(self, save=True):
+        '''
+        优化不写在pattern类中，这里直接返回self.codemat，如果需要就保存
+        '''
+        super().gen_pattern(save)
+        if save == True:
+            codemat = self.codemat.detach().cpu().numpy()
+            self.save_all_to_dir(self.codematrix2patterns(codemat), codemat)
         return self.codemat
     
     def project(self):

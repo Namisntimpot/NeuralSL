@@ -2,6 +2,7 @@ import json
 import argparse
 import os
 from pathlib import Path
+from enum import Enum
 import numpy as np
 import torch
 import torch.nn as nn
@@ -12,8 +13,10 @@ from OpticalSGD.optical_subroutine import ImagingFunction
 from OpticalSGD.decoder import ZNCC_NN
 from OpticalSGD.pattern import OpticalSGDPattern
 from OpticalSGD.utils import resolve_path
+
 from SLPipeline.blender_process import BlenderSubprocess
 from SLPipeline.utils import compute_coresponding_from_depth
+from SLPipeline.hardware_settings import HardwareSettings
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Optical SGD training')
@@ -26,19 +29,28 @@ def parse_args():
 
 
 class TrainOpticalSGDPattern:
+    class mode(Enum):
+        SIM = 0
+        REAL = 1
+
     def __init__(self, args):
         self.args = args
+        self.__mode = self.mode.SIM if args['mode'] == 'sim' else self.mode.REAL
+        
         self.h_cam, self.w_cam = args['h_cam'], args['w_cam']
         self.h_pat, self.w_pat = args['h_pat'], args['w_pat']
         self.n_pat = args['n_pat']
         self.maxF = args['maxF']
         self.tau = args['softmax_tau']
 
-        self.iters_per_Jimg = args['Jimg_update']
+        self.iters_per_Jimg = args['re_Jimg']
+        self.iters_per_gt = args['re_gt']   # 多久要重新评估一次gt
         self.B = args['Jimg_B']
         self.h = args['Jimg_h']
         self.n_iters = args['n_iters']
         self.device = torch.device(args['device'])
+
+        self.hardware_settings = HardwareSettings(args['hardware_config'])
 
         self.output_base_dir = Path(args['output_base_dir'])
         self.output_pattern_dir = resolve_path(Path(args['output_pattern_dir']), self.output_base_dir)
@@ -78,6 +90,20 @@ class TrainOpticalSGDPattern:
         err = torch.abs(index - gt_matched_indices.unsqueeze(-1))  # (h_img, w_img, w_pat)
         err = torch.einsum('ijk, ijk -> ij', sf, err).to(gt_matched_indices.dtype)
         return err.sum() / batchsize
+    
+
+    def render_pattern_in_blender_scene(self):
+        self.pattern.gen_pattern(save=True)
+        self.blender_subprocess.run_and_wait()
 
     def trainloop(self):
+        if self.__mode == self.mode.SIM:
+            # 虚拟场景，只用在一开始获取一个 gt
+            pass
+        
+        for i in range(self.n_iters):
+            # 先成像，如果到时机了就更新Jimg
+            if self.__mode == self.mode.REAL and i % self.iters_per_gt == 0:
+                raise NotImplementedError("Auto-tunning with real hardware and scene is not implemented yet.")
+            
         pass

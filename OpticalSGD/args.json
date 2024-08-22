@@ -1,4 +1,5 @@
 {
+    "mode": "sim",
     "blender":{
         "blender_exe_path": "D:/Software/blender/blender.exe",
         "blender_cwd": "D:/Lijiaheng/NeuralSL/Simulator",
@@ -21,7 +22,6 @@
     "n_pat": 4,
     "maxF": 128,
     "softmax_tau": 200,
-    "Jimg_update": 15,
     "Jimg_B": 7,
     "Jimg_h": 0.15,
 
@@ -33,6 +33,7 @@
     "lr": 0.001,
     "lr_decay": [0.5, 350],
     "re_gt":50,
+    "re_Jimg": 15,
 
     "n_iters": 1000,
     "device": "cuda"

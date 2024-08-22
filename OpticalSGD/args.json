@@ -10,6 +10,7 @@
     "output_base_dir": "OpticalSGD/testimg/active/",
     "output_pattern_dir": "patterns/",
     "output_render_dir": "output/",
+    "output_param_dir": "param/",
 
     "hardware_config": "...",
 

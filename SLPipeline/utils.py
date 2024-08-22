@@ -147,3 +147,17 @@ def visualize_codematrix(codes:np.ndarray, save_path = None):
     if save_path is not None:
         cv2.imwrite(save_path, vis)
     return vis
+
+
+def load_cv2_for_exr():
+    import sys, os
+    import importlib
+    if "cv2" in sys.modules:
+        if not 'OPENCV_IO_ENABLE_OPENEXR' in os.environ:
+            os.environ['OPENCV_IO_ENABLE_OPENEXR'] = "1"
+            importlib.reload(sys.modules['cv2'])
+        else:
+            return
+    else:
+        os.environ['OPENCV_IO_ENABLE_OPENEXR'] = "1"
+        importlib.import_module("cv2")

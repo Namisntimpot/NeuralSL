@@ -8,7 +8,7 @@ import torch
 
 def resolve_path(path:Path, basepath:Path = None):
     if path.is_absolute():
-        return path
+        return path.as_posix()
     else:
         if basepath is None:
             basepath = Path.cwd()

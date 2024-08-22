@@ -4,6 +4,11 @@ import json
 import numpy as np
 import subprocess
 from pathlib import Path
+import glob
+import cv2
+
+from SLPipeline.utils import normalize_image
+
 
 class BlenderSubprocess:
     def __init__(self, exe_path, scene_path, pattern_path, output_path, script_path, cwd) -> None:
@@ -15,6 +20,7 @@ class BlenderSubprocess:
         self.cwd_path = cwd
 
         self.proc:subprocess.Popen = None
+        self.load_exr_tried = False
 
     def run_and_wait(self):
         self.proc = subprocess.Popen(args=[self.exe_path, "--background", self.scene_path,
@@ -38,3 +44,36 @@ class BlenderSubprocess:
 
     def get_scene_path(self):
         return self.resolve_path(self.scene_path)
+    
+    def load_rendered_depth(self):
+        '''
+        return: depth: (h, w), numpy ndarray. dtype = np.float32
+        '''
+        outpath = self.get_output_path()
+        fp = glob.glob(os.path.join(outpath, "depth*"))[0]
+        # 如果是第一次调用，判断cv2的引入和os.environ['OPENCV_IO_ENABLE_OPENEXR']的情况
+        if not self.load_exr_tried:
+            self.load_exr_tried = True
+            from SLPipeline.utils import load_cv2_for_exr
+            load_cv2_for_exr()
+        depth = cv2.imread(fp, cv2.IMREAD_UNCHANGED)
+        return depth
+    
+    def load_rendered_images(self):
+        '''
+        return img (h, w, k), k is the number of rendering results (i.e. the number of patterns). numpy.ndarray, dtype = np.float32, range [0, 1]
+        '''
+        outpath = self.get_output_path()
+        paths = sorted(glob.glob(os.path.join(outpath, "image*")))
+        imgs = []
+        for p in paths:
+            p = Path(p)
+            if p.suffix.lower() in ['jpg', 'png']:
+                im = cv2.imread(str(p), cv2.IMREAD_UNCHANGED)
+                if len(im.shape) != 2:
+                    raise NotImplementedError("Only support grayscale image for now")
+                im = normalize_image(im, bit_depth=8)
+                imgs.append(im)
+            else:
+                raise NotImplementedError
+        return np.stack(imgs, axis=-1)

@@ -11,18 +11,22 @@ from SLPipeline.utils import normalize_image
 from SLPipeline.gen_pattern import PatternGenerator
 
 class ImagingFunction(torch.autograd.Function):
-    forward_image : torch.Tensor = None
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    forward_image : torch.Tensor = None      # (h_img, w_img, k)
     backward_jacobian : torch.Tensor = None  # (h_img, w_img, w_pat, k)
     @staticmethod
-    def forward(ctx, input):
-        return ImagingFunction.forward_image
+    def forward(ctx, input, index):
+        ctx.save_for_backward(index)
+        return ImagingFunction.forward_image[:, index, :]
 
     @staticmethod
     def backward(ctx, grad_output):
         # grad_output的shape是什么? 感觉就是 (h_img, w_img, w_img, k).. ?
         # 之后打印一下，然后矩阵相乘...
-        
-        pass
+        index, = ctx.saved_tensors
+        print(grad_output.shape)
+        raise NotImplementedError
+
 
     @staticmethod
     def imaging(render_proc:bp.BlenderSubprocess):
@@ -34,18 +38,19 @@ class ImagingFunction(torch.autograd.Function):
         returncode = render_proc.run_and_wait()
         if returncode!= 0:
             raise Exception("Blender subprocess failed with return code {}".format(returncode))
-        output_path = render_proc.get_output_path()
-        fnames = sorted(os.listdir(output_path))
-        imgs = []
-        for fname in fnames:
-            if not fname.startswith("image"):
-                continue
-            p = os.path.join(output_path, fname)
-            img = cv2.imread(p, cv2.IMREAD_UNCHANGED)  # (h, w)
-            if img.dtype == np.uint8:
-                img = normalize_image(img.astype(np.float32), 8)
-            imgs.append(torch.from_numpy(img))
-        ImagingFunction.forward_image = torch.stack(imgs, dim=-1)
+        # output_path = render_proc.get_output_path()
+        # fnames = sorted(os.listdir(output_path))
+        # imgs = []
+        # for fname in fnames:
+        #     if not fname.startswith("image"):
+        #         continue
+        #     p = os.path.join(output_path, fname)
+        #     img = cv2.imread(p, cv2.IMREAD_UNCHANGED)  # (h, w)
+        #     if img.dtype == np.uint8:
+        #         img = normalize_image(img.astype(np.float32), 8)
+        #     imgs.append(torch.from_numpy(img))
+        # ImagingFunction.forward_image = torch.stack(imgs, dim=-1)
+        ImagingFunction.forward_image = torch.from_numpy(render_proc.load_rendered_images()).to(ImagingFunction.device)
         return ImagingFunction.forward_image
     
     @staticmethod

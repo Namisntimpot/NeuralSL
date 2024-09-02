@@ -68,7 +68,7 @@ class BlenderSubprocess:
         imgs = []
         for p in paths:
             p = Path(p)
-            if p.suffix.lower() in ['jpg', 'png']:
+            if p.suffix.lower() in ['.jpg', '.png']:
                 im = cv2.imread(str(p), cv2.IMREAD_UNCHANGED)
                 if len(im.shape) != 2:
                     raise NotImplementedError("Only support grayscale image for now")

@@ -15,15 +15,18 @@ class ImagingFunction(torch.autograd.Function):
     forward_image : torch.Tensor = None      # (h_img, w_img, k)
     backward_jacobian : torch.Tensor = None  # (h_img, w_img, w_pat, k)
     @staticmethod
-    def forward(ctx, input, index):
-        ctx.save_for_backward(index)
-        return ImagingFunction.forward_image[:, index, :]
+    def forward(ctx, input:torch.Tensor, index):
+        #########
+        # 小心：必须对"input"也就是投影仪投影的图案“做点什么”以保证它能追踪到计算图中，否则梯度计算图可能断在这里，不会计算相对于input的梯度!
+        #########
+        ctx.save_for_backward(input, index)
+        return ImagingFunction.forward_image[index, :, :] + (input * 1e-8).sum()
 
     @staticmethod
     def backward(ctx, grad_output):
         # grad_output的shape是什么? 感觉就是 (h_img, w_img, w_img, k).. ?
         # 之后打印一下，然后矩阵相乘...
-        index, = ctx.saved_tensors
+        proj_img, index = ctx.saved_tensors
         print(grad_output.shape)
         raise NotImplementedError
 

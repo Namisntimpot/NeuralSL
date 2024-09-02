@@ -16,10 +16,10 @@
 
     "hardware_config": "OpticalSGD/testimg/hardware_settings.json",
 
-    "w_cam": 224,
-    "h_cam": 224,
-    "w_pat": 224,
-    "h_pat": 224,
+    "w_cam": 800,
+    "h_cam": 600,
+    "w_pat": 800,
+    "h_pat": 600,
     "n_pat": 4,
     "maxF": 128,
     "softmax_tau": 200,

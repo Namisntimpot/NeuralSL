@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+from torchviz import make_dot
 
 from OpticalSGD.optical_subroutine import ImagingFunction
 from OpticalSGD.decoder import ZNCC_NN
@@ -89,12 +90,12 @@ class TrainOpticalSGDPattern:
 
     def loss_func(self, gt_matched_indices:torch.Tensor, zncc:torch.Tensor):
         '''
-        gt_matched_indices: (h_img, w_img)
-        zncc: (h_img, w_img, w_pat)
+        gt_matched_indices: (h_selected, w_img)
+        zncc: (h_selected, w_img, w_pat)
         '''
-        batchsize = zncc.shape[-1]
+        batchsize = zncc.shape[0]
         sf = F.softmax(self.tau * zncc.to(torch.float64), dim=-1)  # (h_img, w_img, w_pat)
-        index = torch.arange(self.w_pat).unsqueeze(0).unsqueeze(0).repeat(self.h_img, self.w_img, 1).to(self.device) # (h_img, w_img, w_pat)
+        index = torch.arange(self.w_pat, device=self.device).unsqueeze(0).unsqueeze(0).repeat(batchsize, self.w_cam, 1) # (h_img, w_img, w_pat)
         err = torch.abs(index - gt_matched_indices.unsqueeze(-1))  # (h_img, w_img, w_pat)
         err = torch.einsum('ijk, ijk -> ij', sf, err).to(gt_matched_indices.dtype)
         return err.sum() / batchsize    
@@ -150,7 +151,10 @@ class TrainOpticalSGDPattern:
                 cam_image = ImagingFunction.apply(proj_image, rand_index)
                 # 比较解码
                 zncc = self.decoder.forward(cam_image, proj_image)  # (h_selected, w_img, w_pat)
-                loss = self.loss_func(gt_coresponding, zncc)
+                loss = self.loss_func(gt_coresponding[rand_index, :], zncc)
+
+                # dot = make_dot(loss, params={'pat': self.pattern.codemat, 'cam': cam_image})
+                # dot.render("graph", "OpticalSGD", format="png")
 
                 # 更新梯度
                 self.optimizer.zero_grad()

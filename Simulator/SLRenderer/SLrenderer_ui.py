@@ -19,6 +19,7 @@ class SLRENDERER_PT_Setting_Panel(bpy.types.Panel):
         layout.prop(settings, "resolution_y")
         layout.prop(settings, "export_id")
         layout.prop(settings, "export_img")
+        layout.prop(settings, "export_w_and_b")
         layout.prop(settings, "export_depth")
         layout.prop(settings, "export_normal")
         layout.prop(settings, "specify_pattern_dir")

@@ -4,7 +4,7 @@ import bpy
 def export(
     context: bpy.types.Context,
     reso_x, reso_y, output_dir_path:str = None, id = 0,
-    color_mode = 'RGB', img_format = 'OPEN_EXR',
+    color_mode = 'RGB', img_format = 'OPEN_EXR', image_prefix = "image",
     image = True, depth = True, normal = True
 ):
     # 开启必要的功能
@@ -79,6 +79,6 @@ def export(
         normal_file_output.file_slots[0].path = 'normal'
     if image:
         image_file_output.base_path = output_dir_path
-        image_file_output.file_slots[0].path = 'image'
+        image_file_output.file_slots[0].path = image_prefix
 
     bpy.ops.render.render()

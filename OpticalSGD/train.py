@@ -1,6 +1,7 @@
 import json
 import argparse
 import os
+os.environ['OPENCV_IO_ENABLE_OPENEXR'] = "1"
 from pathlib import Path
 from enum import Enum
 import numpy as np
@@ -13,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from OpticalSGD.optical_subroutine import ImagingFunction
 from OpticalSGD.decoder import ZNCC_NN
 from OpticalSGD.pattern import OpticalSGDPattern
-from OpticalSGD.utils import resolve_path
+from OpticalSGD.utils import *
 
 from SLPipeline.blender_process import BlenderSubprocess
 from SLPipeline.utils import compute_coresponding_from_depth
@@ -22,7 +23,7 @@ from SLPipeline.hardware_settings import HardwareSettings
 def parse_args():
     parser = argparse.ArgumentParser(description='Optical SGD training')
     parser.add_argument('--args', type=str, default="OpticalSGD/args.json")
-    args = parser.parse_known_args()
+    args = parser.parse_args()
     args_path = args.args
     with open(args_path, 'r') as f:
         args = json.load(f)
@@ -78,7 +79,7 @@ class TrainOpticalSGDPattern:
         self.optimizer = optim.RMSprop(
             [
                 {'params': self.pattern.parameters()},
-                {'params': self.decoder.patameters()}
+                {'params': self.decoder.parameters()}
             ],
             lr=args['lr'],
         )
@@ -110,9 +111,13 @@ class TrainOpticalSGDPattern:
     def trainloop(self):
         if self.__mode == self.mode.SIM:
             # 虚拟场景，只用在一开始获取一个 gt
-            imgs, gt_depth = self.render_pattern_in_blender_scene(need_depth=True)
+            ## only for debug
+            imgs, gt_depth = load_imaging_results("OpticalSGD/testimg/bust/alacarte-f16-n4/", need_gt=True)
+
+            # imgs, gt_depth = self.render_pattern_in_blender_scene(need_depth=True)
             gt_coresponding = compute_coresponding_from_depth(gt_depth, self.hardware_settings.cam_intri, 
                                                               self.hardware_settings.proj_intri, self.hardware_settings.R, self.hardware_settings.T)
+            gt_depth = torch.from_numpy(gt_depth).to(self.device)
             gt_coresponding = torch.from_numpy(gt_coresponding).to(self.device)
         first_iter = True
         for i in range(self.n_iters):
@@ -134,7 +139,8 @@ class TrainOpticalSGDPattern:
                     imgs = ImagingFunction.imaging(self.blender_subprocess)
                 # 每隔几个iters更新Jimg
                 if i % self.iters_per_Jimg == 0:
-                    ImagingFunction.update_image_jacobian(self.blender_subprocess, self.pattern.gen_pattern(False, scroll=None), self.B, self.h, self.h_pat)
+                    print("ignore Jimg update temporarily")
+                    # ImagingFunction.update_image_jacobian(self.blender_subprocess, self.pattern.gen_pattern(False, scroll=None), self.B, self.h, self.h_pat)
 
                 # 选取部分行.
                 h = imgs.shape[0]
@@ -170,3 +176,12 @@ class TrainOpticalSGDPattern:
         torch.save(self.pattern.state_dict(), os.path.join(self.output_param_dir, "pattern.pt"))
         torch.save(self.decoder.state_dict(), os.path.join(self.output_param_dir, "decoder.pt"))
                 
+
+def main():
+    args = parse_args()
+    trainer = TrainOpticalSGDPattern(args)
+    trainer.trainloop()
+
+
+if __name__ == '__main__':
+    main()

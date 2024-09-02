@@ -7,20 +7,27 @@ class HardwareSettings:
     class SystemType(Enum):
         normal = 0   # a normal projector and a normal camera that both can be modeled by pinhole model
 
-    def __init__(self, type: SystemType, cam_intri: np.ndarray, proj_intri: np.ndarray, R: np.ndarray, T: np.ndarray):
+    def __init__(self, hardware_config_file:str=None,
+                 type: SystemType=SystemType.normal, 
+                 cam_intri: np.ndarray = None, 
+                 proj_intri: np.ndarray = None, 
+                 R: np.ndarray = None, T: np.ndarray = None):
         '''
         cam_intri:  the intrinsic matrix of the camera, (3, 3) (turn the 3D point coordinates (in mm) in camera sapce to 2D pixel coordinates)
         proj_intri:  the intrinsic matrix of the projector, (3, 3)
         R:  the rotation matrix of the camera relative to the projector, (3, 3)
         T:  the translation vector of the camera relative to the projector, (3) (in mm)
         '''
-        self.type = type
-        self.cam_intri = cam_intri
-        self.proj_intri = proj_intri
-        self.R = R
-        self.T = T
+        if hardware_config_file is not None:
+            self.setup_from_config(hardware_config_file)
+        else:
+            self.type = type
+            self.cam_intri = cam_intri
+            self.proj_intri = proj_intri
+            self.R = R
+            self.T = T
         
-    def __init__(self, hardware_config_file):
+    def setup_from_config(self, hardware_config_file):
         with open(hardware_config_file, 'r') as f:
             d = json.load(f)
         self.type = HardwareSettings.SystemType[d['type']]

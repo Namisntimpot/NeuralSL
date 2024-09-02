@@ -5,16 +5,16 @@
         "blender_cwd": "D:/Lijiaheng/NeuralSL/Simulator",
         "blender_scene_path": "./SimulateSL.blend",
         "blender_output_path": "../OpticalSGD/testimg/active/output/",
-        "blender_script_path": "./SLRenderer/SLrenderer.py"
+        "blender_script_path": "./SLRenderer/SLrenderer.py",
+        "blender_pattern_path": "../OpticalSGD/testimg/active/patterns/"
     },
     "output_base_dir": "OpticalSGD/testimg/active/",
     "output_pattern_dir": "patterns/",
     "output_render_dir": "output/",
     "output_param_dir": "param/",
+    "output_log_dir":"../../testlog/",
 
-    "hardware_config": "...",
-
-    "log_dir":"OpticalSGD/testlog/",
+    "hardware_config": "OpticalSGD/testimg/hardware_settings.json",
 
     "w_cam": 224,
     "h_cam": 224,

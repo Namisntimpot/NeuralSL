@@ -7,7 +7,8 @@ from Alacarte.utils import clip_frequencies
 
 class OpticalSGDPattern(PatternGenerator, nn.Module):
     def __init__(self, width, height, n_patterns, maxF = None, n_g_segs = 32, output_dir=None, format='png', save_codemat_same_dir=False) -> None:
-        super().__init__(width, height, n_patterns, output_dir, format, save_codemat_same_dir)
+        super(OpticalSGDPattern, self).__init__(width, height, n_patterns, output_dir, format, save_codemat_same_dir)
+        super(PatternGenerator, self).__init__()
         self.n_patterns = n_patterns
         self.width = width
         self.height = height
@@ -49,7 +50,7 @@ class OpticalSGDPattern(PatternGenerator, nn.Module):
                 self.codemat.clip_(0, 1)
 
     def g_function(self, x:torch.Tensor):
-        x_coords = torch.arange(0, self.n_g_segs) / self.n_g_segs
+        x_coords = torch.arange(0, self.n_g_segs, device=x.device) / self.n_g_segs
         # 先找到那个恰好比x小的节点
         with torch.no_grad():
             delta = torch.abs(torch.clip(x_coords - x.unsqueeze(-1), max=0))  # 只取在x value左边的x_coords.

@@ -47,10 +47,17 @@ def compute_blender_projector_intrinsic(reso_x, reso_y, scale_x, scale_y):
     return np.array(
         [
             [reso_x / scale_x, 0, 0.5 * reso_x],
-            [0, reso_y / scale_y, 0.5 * reso_y],
+            [0, -reso_y / scale_y, 0.5 * reso_y],  # ??是否要加负号？
             [0, 0, 1]
         ]
     )
+
+def decomposite_instrisic(intri:np.ndarray):
+    '''
+    return fx, cx, fy, cy in pixel unit
+    '''
+    return intri[0, 0], intri[0, 2], abs(intri[1, 1]), intri[1, 2]
+
 
 def compute_coresponding_from_depth(depth_map:np.ndarray, cam_intri:np.ndarray, proj_intri:np.ndarray, R:np.ndarray, T:np.ndarray):
     '''

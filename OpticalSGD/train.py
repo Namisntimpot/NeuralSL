@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from torchviz import make_dot
+# from torchviz import make_dot
 
 from OpticalSGD.optical_subroutine import ImagingFunction
 from OpticalSGD.decoder import ZNCC_NN
@@ -113,9 +113,8 @@ class TrainOpticalSGDPattern:
         if self.__mode == self.mode.SIM:
             # 虚拟场景，只用在一开始获取一个 gt
             ## only for debug
-            imgs, gt_depth = load_imaging_results("OpticalSGD/testimg/bust/alacarte-f16-n4/", need_gt=True)
-
-            # imgs, gt_depth = self.render_pattern_in_blender_scene(need_depth=True)
+            # imgs, gt_depth = load_imaging_results("OpticalSGD/testimg/bust/alacarte-f16-n4/", need_gt=True)
+            imgs, gt_depth = self.render_pattern_in_blender_scene(need_depth=True)
             gt_coresponding = compute_coresponding_from_depth(gt_depth, self.hardware_settings.cam_intri, 
                                                               self.hardware_settings.proj_intri, self.hardware_settings.R, self.hardware_settings.T)
             gt_depth = torch.from_numpy(gt_depth).to(self.device)
@@ -140,8 +139,9 @@ class TrainOpticalSGDPattern:
                     imgs = ImagingFunction.imaging(self.blender_subprocess)
                 # 每隔几个iters更新Jimg
                 if i % self.iters_per_Jimg == 0:
-                    print("ignore Jimg update temporarily")
-                    # ImagingFunction.update_image_jacobian(self.blender_subprocess, self.pattern.gen_pattern(False, scroll=None), self.B, self.h, self.h_pat)
+                    # print("ignore Jimg update temporarily")
+                    # ImagingFunction.backward_jacobian = torch.ones((int(self.h_cam * self.minibatch_rate), self.w_cam, self.w_pat, self.n_pat), device=self.device)
+                    ImagingFunction.update_image_jacobian(self.blender_subprocess, self.pattern.gen_pattern(False, scroll=None), self.B, self.h, self.h_pat)
 
                 # 选取部分行.
                 h = imgs.shape[0]

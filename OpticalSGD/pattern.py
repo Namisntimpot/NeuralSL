@@ -17,7 +17,7 @@ class OpticalSGDPattern(PatternGenerator, nn.Module):
         self.save_codemat_same_dir = save_codemat_same_dir
         self.codemat = nn.Parameter(self.initialize_pattern())
         self.n_g_segs = n_g_segs
-        self.g_param = nn.Parameter(torch.arange(0, n_g_segs+1) / n_g_segs)
+        self.g_param = nn.Parameter(torch.arange(0, n_g_segs+1) / n_g_segs)  # 初始化为{0, 1/32, 2/32,..., 31/32, 1}
         self.maxF = maxF
 
     def initialize_pattern(self):
@@ -50,13 +50,9 @@ class OpticalSGDPattern(PatternGenerator, nn.Module):
                 self.codemat.clip_(0, 1)
 
     def g_function(self, x:torch.Tensor):
-        x_coords = torch.arange(0, self.n_g_segs, device=x.device) / self.n_g_segs
-        # 先找到那个恰好比x小的节点
-        with torch.no_grad():
-            delta = torch.abs(torch.clip(x_coords - x.unsqueeze(-1), max=0))  # 只取在x value左边的x_coords.
-            _, ind = delta.min(dim=-1)  # ind的shape应该是(k, w_pat)
-        lower_g_value = self.g_param[ind]
-        upper_g_value = self.g_param[ind+1]
-        lower_x_value = x_coords[ind]
-        g_value = lower_g_value + (upper_g_value - lower_g_value) * self.n_g_segs * (x - lower_x_value)
-        return g_value
+        seg_indices = (x * self.n_g_segs).floor().long()  # 先把x值映射到[0, 1]区间，然后乘以n_g_segs，得到每个像素点对应的segment的index
+        y0 = self.g_param[seg_indices]
+        y1 = self.g_param[torch.clamp(seg_indices+1, max=self.n_g_segs)]
+        x_relative = (x - seg_indices.float() / self.n_g_segs) * self.n_g_segs
+        y = y0 + (y1-y0) * x_relative
+        return y

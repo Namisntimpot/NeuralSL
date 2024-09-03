@@ -16,42 +16,42 @@ def expand_p_neighbor(a:np.ndarray, b:np.ndarray, p:int):
     w_cam = a.shape[-2]
     a_arr = []
     b_arr = []
-    with torch.no_grad():
-        for i in range(-t, 0):
-            a_tmp = torch.zeros_like(a)
-            b_tmp = torch.zeros_like(b)
-            a_tmp[..., -i:, :] = a[..., :w_cam+i, :]
-            b_tmp[:,-i:] = b[:, :w_pat+i]
-            a_tmp[..., :-i, :] = a[...,0:1,:]
-            b_tmp[:, :-i] = b[...,0:1]
-            a_arr.append(a_tmp)
-            b_arr.append(b_tmp)
-        a_arr.append(a)
-        b_arr.append(b)
-        for i in range(1, t+1):
-            a_tmp = torch.zeros_like(a)
-            b_tmp = torch.zeros_like(b)
-            a_tmp[..., :w_cam-i, :] = a[..., i:, :]
-            b_tmp[:,:w_pat-i] = b[:, i:]
-            a_tmp[..., w_cam-i:, :] = a[...,-1:,:]
-            b_tmp[:, w_pat-i:] = b[...,-1:]
-            a_arr.append(a_tmp)
-            b_arr.append(b_tmp)
-        # for i in range(-t, t+1):
-        #     a_tmp = torch.zeros_like(a)
-        #     b_tmp = torch.zeros_like(b)
-        #     a_tmp[..., -i : w_cam - i, :] = a[..., i : w_cam+i, :]
-        #     b_tmp[:, -i : w_pat - i] = b[:, i : w_pat + i]
-        #     if i < 0:
-        #         a_tmp[..., :-i, :] = a[..., 0, :]
-        #         b_tmp[:, :-i] = b[:, 0]
-        #     elif i>0:
-        #         a_tmp[..., w_cam - i:, :] = a[..., -1, :]
-        #         b_tmp[:, w_pat-i:] = b[:, -1]
-        #     a_arr.append(a_tmp)
-        #     b_arr.append(b_tmp)
-        ap = torch.cat(a_arr, dim=-1)
-        bp = torch.cat(b_arr, dim=-2)
+
+    for i in range(-t, 0):
+        a_tmp = torch.zeros_like(a)
+        b_tmp = torch.zeros_like(b)
+        a_tmp[..., -i:, :] = a[..., :w_cam+i, :]
+        b_tmp[:,-i:] = b[:, :w_pat+i]
+        a_tmp[..., :-i, :] = a[...,0:1,:]
+        b_tmp[:, :-i] = b[...,0:1]
+        a_arr.append(a_tmp)
+        b_arr.append(b_tmp)
+    a_arr.append(a)
+    b_arr.append(b)
+    for i in range(1, t+1):
+        a_tmp = torch.zeros_like(a)
+        b_tmp = torch.zeros_like(b)
+        a_tmp[..., :w_cam-i, :] = a[..., i:, :]
+        b_tmp[:,:w_pat-i] = b[:, i:]
+        a_tmp[..., w_cam-i:, :] = a[...,-1:,:]
+        b_tmp[:, w_pat-i:] = b[...,-1:]
+        a_arr.append(a_tmp)
+        b_arr.append(b_tmp)
+    # for i in range(-t, t+1):
+    #     a_tmp = torch.zeros_like(a)
+    #     b_tmp = torch.zeros_like(b)
+    #     a_tmp[..., -i : w_cam - i, :] = a[..., i : w_cam+i, :]
+    #     b_tmp[:, -i : w_pat - i] = b[:, i : w_pat + i]
+    #     if i < 0:
+    #         a_tmp[..., :-i, :] = a[..., 0, :]
+    #         b_tmp[:, :-i] = b[:, 0]
+    #     elif i>0:
+    #         a_tmp[..., w_cam - i:, :] = a[..., -1, :]
+    #         b_tmp[:, w_pat-i:] = b[:, -1]
+    #     a_arr.append(a_tmp)
+    #     b_arr.append(b_tmp)
+    ap = torch.cat(a_arr, dim=-1)
+    bp = torch.cat(b_arr, dim=-2)
     return ap, bp
 
 

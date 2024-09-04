@@ -23,7 +23,7 @@ def ZNCC_torch(a:torch.Tensor, b:torch.Tensor):
     l2_zb = torch.sqrt(torch.sum(zb ** 2, dim=-2, keepdim=True))
     return torch.einsum("...pk, ...kq -> ...pq", za / l2_za, zb / l2_zb)
 
-def compute_ideal_intrinsic(focal_length, reso_x, reso_y, sensor_x, sensor_y):
+def compute_ideal_intrinsic(focal_length, reso_x, reso_y, sensor_x, sensor_y, reverse_y:bool = True):
     '''
     Compute an ideal intrinsic matrix  (camera coordinate -> pixel coordinate)
     use mm as the unit
@@ -34,12 +34,12 @@ def compute_ideal_intrinsic(focal_length, reso_x, reso_y, sensor_x, sensor_y):
     return np.array(
         [
             [pixel_rho_x * focal_length, 0, pixel_rho_x * cx],
-            [0, -pixel_rho_y * focal_length, pixel_rho_y * cy],
+            [0, pixel_rho_y * focal_length * (-1 if reverse_y else 1), pixel_rho_y * cy],
             [0, 0, 1]
         ]
     )
 
-def compute_blender_projector_intrinsic(reso_x, reso_y, scale_x, scale_y):
+def compute_blender_projector_intrinsic(reso_x, reso_y, scale_x, scale_y, reverse_y:bool = True):
     '''
     reso: the resolutionos the pattern used.
     scale: the scale value of of the second Mapping node of the spot light in blender
@@ -47,7 +47,7 @@ def compute_blender_projector_intrinsic(reso_x, reso_y, scale_x, scale_y):
     return np.array(
         [
             [reso_x / scale_x, 0, 0.5 * reso_x],
-            [0, -reso_y / scale_y, 0.5 * reso_y],  # ??是否要加负号？
+            [0, reso_y / scale_y * (-1 if reverse_y else 1), 0.5 * reso_y],  # ??是否要加负号？
             [0, 0, 1]
         ]
     )

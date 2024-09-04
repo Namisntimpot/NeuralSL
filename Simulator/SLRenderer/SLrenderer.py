@@ -62,7 +62,7 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                 export(
                     context, settings.resolution_x, settings.resolution_y,
                     settings.output_dir_path, settings.export_id,
-                    settings.color_mode, 'OPEN_EXR',
+                    settings.color_mode, 'OPEN_EXR', "image",
                     False, settings.export_depth, settings.export_normal
                 )
             # 再img
@@ -70,7 +70,7 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                 export(
                     context, settings.resolution_x, settings.resolution_y,
                     settings.output_dir_path, settings.export_id,
-                    settings.color_mode, settings.img_format,
+                    settings.color_mode, settings.img_format, "image",
                     settings.export_img, False, False
                 )
 
@@ -90,7 +90,7 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                 export(
                     context, settings.resolution_x, settings.resolution_y,
                     settings.output_dir_path, settings.export_id,
-                    settings.color_mode, 'OPEN_EXR', False, settings.export_depth, settings.export_normal
+                    settings.color_mode, 'OPEN_EXR', "image", False, settings.export_depth, settings.export_normal
                 )   
             # 再逐帧渲染图片
             if settings.export_img:
@@ -103,7 +103,7 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                         export(
                             context, settings.resolution_x, settings.resolution_y,
                             settings.output_dir_path, settings.export_id,
-                            settings.color_mode, settings.img_format, settings.export_img, False, False
+                            settings.color_mode, settings.img_format, "image", settings.export_img, False, False
                         )
                     else:
                         bpy.ops.render.render()      
@@ -111,11 +111,12 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
             if settings.export_w_and_b:
                 for p in ['WHITE', 'BLACK']:
                     ori = self.apply_texture_to_projector(settings, scene, projector, p)
-                    if p == 'WHITE' and not settings.export_img:
+                    # if p == 'WHITE' and not settings.export_img:
+                    if True:
                         export(
                             context, settings.resolution_x, settings.resolution_y,
                             settings.output_dir_path, settings.export_id,
-                            settings.color_mode, settings.img_format, settings.export_img, False, False
+                            settings.color_mode, settings.img_format, p.lower(), True, False, False
                         )
                     else:
                         bpy.ops.render.render()
@@ -147,14 +148,15 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
             return ori_pic
         if texture_path == "BLACK":
             black_pic = bpy.data.images.new(name="TempBlackPicture", width=settings.resolution_x, height=settings.resolution_y, alpha=False, float_buffer=True)
-            pix = np.zeros((settings.resolution_x * settings.resolution_y * 3), dtype=np.float32)
-            black_pic.pixels = pix.tolist()
+            pix = np.zeros((settings.resolution_y, settings.resolution_x, 4), dtype=np.float32)
+            pix[:,:,-1] = 1
+            black_pic.pixels = pix.flatten().tolist()
             texture_node.image = black_pic
             black_pic.update()
             return ori_pic
         elif texture_path == "WHITE":
             white_pic = bpy.data.images.new(name="TempWhitePicture", width=settings.resolution_x, height=settings.resolution_y, alpha=False, float_buffer=True)
-            pix = np.ones((settings.resolution_x * settings.resolution_y * 3), dtype=np.float32)
+            pix = np.ones((settings.resolution_x * settings.resolution_y * 4), dtype=np.float32)
             white_pic.pixels = pix.tolist()
             texture_node.image = white_pic
             white_pic.update()

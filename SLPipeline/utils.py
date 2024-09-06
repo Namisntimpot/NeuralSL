@@ -71,14 +71,15 @@ def compute_coresponding_from_depth(depth_map:np.ndarray, cam_intri:np.ndarray, 
     y, x = np.mgrid[:h, :w]
     # camera's pixel coordinates
     pixel_coord_cam = np.stack([x, y, np.ones_like(x)], axis=-1)  # (h, w, 3)
+    print(pixel_coord_cam[300:400, 400:500])
     cam_intri_inv = np.linalg.inv(cam_intri)  # (3, 3)
-    space_coord_cam = np.einsum("mk, hwk -> hwm", cam_intri_inv, pixel_coord_cam * depth_map[:,:,np.newaxis].repeat(3, axis=-1))
+    space_coord_cam = np.einsum("mk, hwk -> hwm", cam_intri_inv, pixel_coord_cam * depth_map[:,:,np.newaxis])
     space_coord_cam_ho = np.concatenate([space_coord_cam, np.ones_like(space_coord_cam[:,:,:1])] , axis=-1)  # (h, w, 4)
     trans = RT2TransformMatrix(R, T, want='3x4')
     space_coord_proj = np.einsum("jk, hwk -> hwj", trans, space_coord_cam_ho)  # (h, w, 3)
     pixel_coord_proj = np.einsum("jk, hwk -> hwj", proj_intri, space_coord_proj) / space_coord_proj[...,2:3]  # (h, w, 3)
     # y坐标是匹配到的结果.
-    return pixel_coord_proj[...,1]
+    return pixel_coord_proj[...,0]
 
 def RT2TransformMatrix(R:np.ndarray, T:np.ndarray, want:str = '3x4'):
     '''

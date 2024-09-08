@@ -61,6 +61,7 @@ def decomposite_instrisic(intri:np.ndarray):
 
 def compute_coresponding_from_depth(depth_map:np.ndarray, cam_intri:np.ndarray, proj_intri:np.ndarray, R:np.ndarray, T:np.ndarray):
     '''
+    warning: the unit issue! (now hdsettings use mm as length unit)
     with the real depth map (in mm), camera and projector's intrisic matrix known, compute the real coresponding map.  
     R:  the rotation matrix of the camera relative to the projector, (3, 3)
     T:  the translation vector of the camera relative to the projector, (3) (in mm)
@@ -71,7 +72,6 @@ def compute_coresponding_from_depth(depth_map:np.ndarray, cam_intri:np.ndarray, 
     y, x = np.mgrid[:h, :w]
     # camera's pixel coordinates
     pixel_coord_cam = np.stack([x, y, np.ones_like(x)], axis=-1)  # (h, w, 3)
-    print(pixel_coord_cam[300:400, 400:500])
     cam_intri_inv = np.linalg.inv(cam_intri)  # (3, 3)
     space_coord_cam = np.einsum("mk, hwk -> hwm", cam_intri_inv, pixel_coord_cam * depth_map[:,:,np.newaxis])
     space_coord_cam_ho = np.concatenate([space_coord_cam, np.ones_like(space_coord_cam[:,:,:1])] , axis=-1)  # (h, w, 4)
@@ -155,6 +155,33 @@ def visualize_codematrix(codes:np.ndarray, save_path = None):
     if save_path is not None:
         cv2.imwrite(save_path, vis)
     return vis
+
+
+def visualize_errormap(a, gt, bounds = 'log10', save_path = None):
+    if bounds == 'log10':
+        bounds = [-100, -10, -1, 1, 10, 100]
+    elif type(bounds) == list:
+        pass
+    else:
+        raise NotImplementedError
+    err = a - gt
+    import matplotlib.colors as mcolors
+    norm = mcolors.SymLogNorm(linthresh=1, linscale=1, vmin=-100, vmax=100, base=10)
+    # 使用自定义颜色映射
+    cmap = plt.get_cmap('bwr')  # 颜色映射选择
+    fig, ax = plt.subplots()
+
+    # 显示数据
+    cax = ax.imshow(err, cmap=cmap, norm=norm)
+
+    # 添加颜色条，并指定标签和比例
+    cbar = fig.colorbar(cax)
+    cbar.set_label('error (pixels)')
+    if save_path is None:
+        plt.show()
+    else:
+        plt.savefig(save_path)
+    plt.close()
 
 
 def load_cv2_for_exr():

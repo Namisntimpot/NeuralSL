@@ -59,10 +59,17 @@ def ZNCC_p(a:torch.Tensor, b:torch.Tensor, p):
     '''
     a: (..., w_cam, k), camera's code array
     b: (k, w_pat), projector's code matrix
-    p: p-neighbor, perferably an odd number
+    the result (h, p, q) means ZNCC(pixel(h, p), code(q))
     '''
     ap, bp = expand_p_neighbor(a, b, p)
     return ZNCC_torch(ap, bp)
+
+def ZNCC_p_np(a:np.ndarray, b:np.ndarray, p, device = torch.device("cpu")):
+    with torch.no_grad():
+        at = torch.from_numpy(a).to(device)
+        bt = torch.from_numpy(b).to(device)
+        zncc = ZNCC_p(at, bt, p)
+    return zncc.cpu().numpy()
     
 
 class ZNCC_NN(nn.Module):

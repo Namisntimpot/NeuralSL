@@ -16,16 +16,18 @@ def resolve_path(path:Path, basepath:Path = None):
         return basepath.joinpath(path).resolve().as_posix()
     
 
-def load_imaging_results(path:str, need_gt = False):
+def load_imaging_results(path:str, need_gt = False, img_prefix = "image"):
     '''
     load the imaging results. For now, 'imaging results' are the Blender's rendering results.  
     images' filenames are started with 'image', while depth's filename is started with 'depth'.  
     return: image_code_arrays if not need_gt else (image_code_arrays, gt_depth)
     '''
-    img_paths = sorted(glob.glob(os.path.join(path, 'image*')))
+    img_paths = sorted(glob.glob(os.path.join(path, img_prefix+"*")))
     imgdata = []
     for imgp in  img_paths:
         img = normalize_image(cv2.imread(imgp, cv2.IMREAD_UNCHANGED), bit_depth=8)
+        if len(img.shape) == 3:
+            img = img[:,:,0]
         imgdata.append(img)
     img = np.stack(imgdata, axis=-1)
 
@@ -38,3 +40,16 @@ def load_imaging_results(path:str, need_gt = False):
         return img, gt_depth
     else:
         return img
+    
+def load_patterns_results(path:str, pat_prefix = "", n_pat_axis = 0):
+    pat_paths = sorted(glob.glob(os.path.join(path, pat_prefix+"*")))
+    patdata = []
+    for patp in pat_paths:
+        pat = cv2.imread(patp, cv2.IMREAD_UNCHANGED)
+        if len(pat.shape) == 3:
+            pat = pat[0,:,0]
+        else:
+            pat = pat[0,:]
+        pat = normalize_image(pat, bit_depth=8)
+        patdata.append(pat)
+    return np.stack(patdata, axis=n_pat_axis)

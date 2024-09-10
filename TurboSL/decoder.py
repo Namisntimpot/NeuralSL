@@ -20,9 +20,10 @@ class TurboSLPixelwiseDecoder:
         self.imgh, self.imgw, self.patw, self.npat = imgh, imgw, patw, npat
         self.device = device
         self.cam_c2w = torch.eye(4, device=device).float()
+        self.cam_w2c = torch.linalg.inv(self.cam_c2w)
         # warning: hardsettings units issue here (mm)
-        self.proj_c2w = RT2TransformMatrix(hardware_settings.R, hardware_settings.T / 1000, want='4x4')
-        self.proj_c2w = torch.from_numpy(np.linalg.inv(self.proj_c2w)).float().to(device)
+        self.proj_w2c = torch.from_numpy(RT2TransformMatrix(hardware_settings.R, hardware_settings.T / 1000, want='4x4')).float().to(device)
+        self.proj_c2w = torch.linalg.inv(self.proj_w2c).float().to(device)
         
         self.fx_cam, self.cx_cam, self.fy_cam, self.cy_cam = decomposite_instrisic(self.hardware.cam_intri)
         self.fx_proj,self.cx_proj,self.fy_proj,self.cy_proj= decomposite_instrisic(self.hardware.proj_intri)
@@ -31,6 +32,14 @@ class TurboSLPixelwiseDecoder:
 
         self.cam_world_origin, self.cam_world_directions = get_world_rays(self.cam_local_directions, self.cam_c2w, keepdim=True)
         self.proj_world_origin,self.proj_world_directions= get_world_rays(self.proj_local_directions, self.proj_c2w, keepdim=True)
+
+        # 让投影仪每行射线与相机共面.
+        # 相机每行射线与基线形成的平面.
+        # 假设投影仪和相机完全对齐.
+        # 相机坐标系就是世界坐标系
+        self.proj_world_directions[..., 1] = self.cam_world_directions[..., 1]
+
+
     
     def decode(self, img:torch.Tensor, pat:torch.Tensor):
         '''
@@ -58,22 +67,25 @@ class TurboSLPixelwiseDecoder:
             for j in range(400, 401):
                 cam_ray_o = self.cam_world_origin[i, j]  # (3)
                 cam_ray_d = self.cam_world_directions[i, j]  # (3)
+                print(cam_ray_o, cam_ray_d)
                 print(proj_row_rays_o[0], proj_row_rays_d[0])
                 t_pat_pixels = compute_rays_intersection(proj_row_rays_o, proj_row_rays_d, cam_ray_o, cam_ray_d)[1]  # (patw,)
-                print(t_pat_pixels[0])
                 import matplotlib.pyplot as plt
                 plt.plot(np.arange(self.patw), t_pat_pixels.cpu().numpy())
-                t_pat_pixels = t_pat_pixels.unsqueeze(0).repeat(self.patw, 1) # (patw, patw), [i,j]表示如果i是匹配结果，那么j的sdf值大小.
                 plt.show()
-                sdf = t_pat_pixels[:,:1] - t_pat_pixels  # [i, j]表示如果i是匹配结果，那么j是(强行近似假装的)sdf值的大小
+                
+                t_pat_pixels = t_pat_pixels.unsqueeze(0).repeat(self.patw, 1) # (patw, patw), [i,j]表示如果i是匹配结果，那么j的sdf值大小.
+                sdf = t_pat_pixels[0,:,None] - t_pat_pixels  # [i, j]表示如果i是匹配结果，那么j是(强行近似假装的)sdf值的大小
                 alpha = self.get_approximate_alpha(sdf) # (patw, patw)
                 # ray_indices = torch.arange(self.patw).unsqueeze(-1).repeat(1, self.patw)
                 # n_rays = self.patw
                 weights, transmission = render_weight_from_alpha(alpha)  # (patw, patw)
+                plt.plot(np.arange(self.patw), alpha.cpu().numpy()[800-432])
+                plt.show()
                 rendered = accumulate_along_rays(weights, pat_.flip([0]).unsqueeze(0).repeat(self.patw, 1, 1))  # (patw, npat)
                 imgcode = img[i, j]  # (npat)
                 sim = ((rendered - imgcode)**2).sum(dim=-1)  # (patw)
-                matched = torch.min(sim, dim=0)[1]
+                matched = torch.max(sim, dim=0)[1]
                 matched_indices[i, j] = self.patw - matched
 
         return matched_indices.long()                
@@ -105,5 +117,6 @@ if __name__ == '__main__':
     pats = load_patterns_results(patdir, n_pat_axis=-1)  # (patw, n_pat)
     with torch.no_grad():
         matched = decoder.decode(imgs, pats)
+    print(gt_depth[300, 400])
     print(gt_coresponding[300, 400])
-    print(matched)
+    print(matched[300, 400])

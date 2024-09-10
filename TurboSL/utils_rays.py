@@ -47,16 +47,38 @@ def compute_rays_intersection(r1_o:torch.Tensor, r1_d:torch.Tensor, r2_o:torch.T
     Assuming two straight lines are collinear and we do not check it here.
     return t1, t2 (distance)
     '''
-    delta = r2_o - r1_o
-    t3 = delta.norm(dim=-1)
-    cos1 = (r1_d * delta).sum(dim=-1) / (r1_d.norm(dim=-1) * t3)
-    cos2 = (r2_d * (-delta)).sum(dim=-1) / (r2_d.norm(dim=-1) * t3)
-    sin1 = torch.sqrt(1 - cos1**2)
-    sin2 = torch.sqrt(1 - cos2**2)
-    cos3 = -(cos1 * cos2 - sin1 * sin2)
+    # delta = r2_o - r1_o
+    # t3 = delta.norm(dim=-1)
+    # cos1 = (r1_d * delta).sum(dim=-1) / (r1_d.norm(dim=-1) * t3)
+    # cos2 = (r2_d * (-delta)).sum(dim=-1) / (r2_d.norm(dim=-1) * t3)
+    # sin1 = torch.sqrt(1 - cos1**2)
+    # sin2 = torch.sqrt(1 - cos2**2)
+    # cos3 = -(cos1 * cos2 - sin1 * sin2)
 
-    k = sin2 / sin1
-    t2 = torch.sqrt(t3**2 / (k**2 + 1 - 2*k*cos3))
-    k = sin1 / sin2
-    t1 = torch.sqrt(t3**2 / (k**2 + 1 - 2*k*cos3))
+    # k = sin2 / sin1
+    # t2 = torch.sqrt(t3**2 / (k**2 + 1 - 2*k*cos3))
+    # k = sin1 / sin2
+    # t1 = torch.sqrt(t3**2 / (k**2 + 1 - 2*k*cos3))
+    # return t1, t2
+    r1_d_norm = r1_d / torch.norm(r1_d, dim=-1).unsqueeze(-1)
+    r2_d_norm = r2_d / torch.norm(r2_d, dim=-1).unsqueeze(-1)
+    if len(r1_d_norm.shape) < len(r2_d_norm.shape):
+        r1_d_norm = r1_d_norm.expand_as(r2_d_norm)
+    elif len(r1_d_norm.shape) > len(r2_d_norm.shape):
+        r2_d_norm = r2_d_norm.expand_as(r1_d_norm)
+    # normals = torch.cross(r1_d_norm, r2_d_norm)
+    # d1 = -(normals * r1_o).sum(dim=-1)  # ax+by+cz+d = 0
+    # abcd1 = torch.concat([normals, d1.unsqueeze(-1)], dim=-1)
+    # d2 = -(normals * r2_o).sum(dim=-1)
+    # abcd2 = torch.concat([normals, d2.unsqueeze(-1)], dim=-1)
+    A = torch.stack([r1_d_norm[..., :-1], -r2_d_norm[..., :-1]], dim=-1)  # (..., 2, 2)
+    # det = A[..., 0, 0] * A[..., 1, 1] - A[..., 0, 1] * A[..., 1, 0]
+    # print(det.min(dim=-1))
+    # det = det.expand_as(A)
+    # A_inv = A / det
+    b = (r2_o - r1_o)[..., :-1]
+    # t = (A_inv * b.unsqueeze(-1)).sum(-1)
+    t = torch.linalg.solve(A, b)
+    t1 = t[..., 0]
+    t2 = t[..., 1]
     return t1, t2

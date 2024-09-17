@@ -23,7 +23,7 @@ def ZNCC_torch(a:torch.Tensor, b:torch.Tensor):
     l2_zb = torch.sqrt(torch.sum(zb ** 2, dim=-2, keepdim=True))
     return torch.einsum("...pk, ...kq -> ...pq", za / l2_za, zb / l2_zb)
 
-def compute_ideal_intrinsic(focal_length, reso_x, reso_y, sensor_x, sensor_y, reverse_y:bool = True):
+def compute_ideal_intrinsic(focal_length, reso_x, reso_y, sensor_x, sensor_y, reverse_y:bool = False):
     '''
     Compute an ideal intrinsic matrix  (camera coordinate -> pixel coordinate)
     use mm as the unit
@@ -39,10 +39,12 @@ def compute_ideal_intrinsic(focal_length, reso_x, reso_y, sensor_x, sensor_y, re
         ]
     )
 
-def compute_blender_projector_intrinsic(reso_x, reso_y, scale_x, scale_y, reverse_y:bool = True):
+def compute_blender_projector_intrinsic(reso_x, reso_y, scale_x, scale_y, reverse_y:bool = False):
     '''
     reso: the resolutionos the pattern used.
     scale: the scale value of of the second Mapping node of the spot light in blender
+
+    当reverse_y == False, 所用的相机坐标系是一般的，x左y下、相机拍摄z正方向, 右手系.
     '''
     return np.array(
         [
@@ -51,6 +53,26 @@ def compute_blender_projector_intrinsic(reso_x, reso_y, scale_x, scale_y, revers
             [0, 0, 1]
         ]
     )
+
+def compute_rotation_matrix(rot_x, rot_y, rot_z, order = 'xyz', eps=1e-8):
+    '''
+    compute rotation matrix from euler engles. rot_x, rot_y, rot_z are rotation angles in degree.  
+    for blender's camera, the order should be 'xyz'
+    '''
+    from math import pi
+    from scipy.spatial.transform import Rotation as R
+
+    # 定义欧拉角（单位是弧度）
+    angles = [rot_x * pi / 180, rot_y * pi / 180, rot_z * pi / 180]  # [X轴旋转, Y轴旋转, Z轴旋转]
+
+    # 指定旋转顺序，例如 'xyz'
+    r = R.from_euler('xyz', angles)
+
+    # 将欧拉角转换为旋转矩阵
+    rotation_matrix = r.as_matrix()
+    rotation_matrix[rotation_matrix < eps] = 0
+    return rotation_matrix
+    
 
 def decomposite_instrisic(intri:np.ndarray):
     '''

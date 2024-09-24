@@ -3,13 +3,15 @@ import os
 import sys
 import argparse
 import numpy as np
+from glob import glob
+from PIL import Image
 
 # 确保Blender可以找到其他脚本文件
 SLRendererDir = "D:\\Lijiaheng\\NeuralSL\\Simulator\\SLRenderer"
 sys.path.append(SLRendererDir)
 
 from SLRenderer_export import export
-from SLrenderer_ui import SLRENDERER_PT_Setting_Panel
+from SLrenderer_ui import SLRENDERER_PT_Setting_Panel, SLRENDERER_UL_HideObjectList, bpy_register_ui_components, bpy_unregister_ui_components
 
 class SLRendererSettings(bpy.types.PropertyGroup):
     resolution_x: bpy.props.IntProperty(name="Resolution X", default=1920)
@@ -20,6 +22,10 @@ class SLRendererSettings(bpy.types.PropertyGroup):
     export_depth: bpy.props.BoolProperty(name="Export Depth", default=True)
     export_normal: bpy.props.BoolProperty(name="Export Normal", default=False)
     export_w_and_b: bpy.props.BoolProperty(name="Export White and Black images", default=False, description="used for capturing ambient and albedo. BLACK shutdown the projector, WHITE projects a white pattern.")
+    export_mask: bpy.props.BoolProperty(name="Export Mask image", default=False, description="export a binarized mask image.")
+    hidden_object_list: bpy.props.CollectionProperty(name="Hidden objects list", type=bpy.types.PropertyGroup)
+    hidden_object_list_index: bpy.props.IntProperty(name="Hidden object's index")
+    
     specify_pattern_dir: bpy.props.BoolProperty(name="Specify Pattern Dir", default=False)
     pattern_dir_path: bpy.props.StringProperty(name="Pattern Dir Path", default="//", subtype="DIR_PATH")
     output_dir_path: bpy.props.StringProperty(name="Output Dir Path", default="//", subtype='DIR_PATH')
@@ -46,13 +52,14 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
     bl_idname = "slrenderer.export"
     bl_label = "Export Rendering Results"
     projector_identifier = "Projector.Spot"
+    binarization_thresh = 0.1
 
     def execute(self, context):
         scene = context.scene
         settings : SLRendererSettings = scene.slrenderer_settings
 
-        abs_path = convert_path_to_abs_path(settings.output_dir_path)
-        if not os.path.isdir(abs_path):
+        abs_output_path = convert_path_to_abs_path(settings.output_dir_path)
+        if not os.path.isdir(abs_output_path):
             self.report({'ERROR'}, "Invalid output dir path")
             return {'CANCELLED'}
 
@@ -107,24 +114,62 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                         )
                     else:
                         bpy.ops.render.render()      
-            # 再渲染BLACK or WHITE
-            if settings.export_w_and_b:
-                for p in ['WHITE', 'BLACK']:
-                    ori = self.apply_texture_to_projector(settings, scene, projector, p)
-                    # if p == 'WHITE' and not settings.export_img:
-                    if True:
-                        export(
-                            context, settings.resolution_x, settings.resolution_y,
-                            settings.output_dir_path, settings.export_id,
-                            settings.color_mode, settings.img_format, p.lower(), True, False, False
-                        )
-                    else:
-                        bpy.ops.render.render()
-                    tmp = self.apply_texture_to_projector(settings, scene, projector, ori)
-                    bpy.data.images.remove(tmp)
-                    
+        # 再渲染BLACK or WHITE
+        if settings.export_w_and_b:
+            for p in ['WHITE', 'BLACK']:
+                ori = self.apply_texture_to_projector(settings, scene, projector, p)
+                # if p == 'WHITE' and not settings.export_img:
+                if True:   # 还是重来一遍吧
+                    export(
+                        context, settings.resolution_x, settings.resolution_y,
+                        settings.output_dir_path, settings.export_id,
+                        settings.color_mode, settings.img_format, p.lower(), True, False, False
+                    )
+                else:
+                    bpy.ops.render.render()
+                tmp = self.apply_texture_to_projector(settings, scene, projector, ori)
+                bpy.data.images.remove(tmp)
+
+        # 渲染mask图
+        if settings.export_mask:
+            ori = self.apply_texture_to_projector(settings, scene, projector, 'WHITE')
+            for hidden_obj_name in settings.hidden_object_list:
+                obj = bpy.data.objects.get(hidden_obj_name.name)
+                if obj:
+                    obj.hide_render = True
+            export(
+                context, settings.resolution_x, settings.resolution_y,
+                settings.output_dir_path, settings.export_id,
+                settings.color_mode, settings.img_format, "mask", True, False, False
+            )
+            for hidden_obj_name in settings.hidden_object_list:
+                obj = bpy.data.objects.get(hidden_obj_name.name)
+                if obj:
+                    obj.hide_render = False
+            self.apply_texture_to_projector(settings, scene, projector, ori)
+            mask_path = glob(os.path.join(abs_output_path, "mask*"))[0]
+            mask = self.binarize_mask(mask_path)
+            mask = Image.fromarray(mask)
+            mask.save(mask_path)
+        
+        print("Done.")
         
         return {'FINISHED'}
+    
+    def binarize_mask(self, path):
+        img = Image.open(path)
+        imgnp = np.array(img)
+        if imgnp.dtype == np.uint8:
+            thresh = self.binarization_thresh * 255.
+            mx = 255
+        elif imgnp.dtype == np.uint16:
+            thresh = self.binarization_thresh * 65535
+            mx = 65535
+        else:
+            mx = imgnp.max()
+            thresh = float(mx) * self.binarization_thresh
+        mask = (imgnp > thresh).astype(imgnp.dtype) * mx
+        return mask
     
     def find_projector(self, scene:bpy.types.Scene):
         ind = scene.objects.find(SLRENDERER_OT_Export.projector_identifier)
@@ -173,16 +218,12 @@ def convert_path_to_abs_path(p: str):
 
 def register():
     bpy.utils.register_class(SLRendererSettings)
-    try:
-        bpy.utils.register_class(SLRENDERER_PT_Setting_Panel)
-    except:
-        bpy.utils.unregister_class(SLRENDERER_PT_Setting_Panel)
-        bpy.utils.register_class(SLRENDERER_PT_Setting_Panel)
+    bpy_register_ui_components()
     bpy.utils.register_class(SLRENDERER_OT_Export)
     bpy.types.Scene.slrenderer_settings = bpy.props.PointerProperty(type=SLRendererSettings)
 
 def unregister():
-    bpy.utils.unregister_class(SLRENDERER_PT_Setting_Panel)
+    bpy_unregister_ui_components()
     bpy.utils.unregister_class(SLRENDERER_OT_Export)
     bpy.utils.unregister_class(SLRendererSettings)
 

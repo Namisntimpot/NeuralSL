@@ -139,10 +139,10 @@ def visualize_disparity(disparity: np.ndarray, vmin = 0, vmax = 200, save_path:s
     plt.close()
 
 
-def visualize_depth(depth: np.ndarray, vmin = 0, vmax = 4000, save_path:str = None):
+def visualize_depth(depth: np.ndarray, vmin = 0, vmax = 4000, unit:str = 'mm', save_path:str = None):
     plt.figure(figsize=(10, 6))
     plt.imshow(depth, cmap='viridis', vmin=vmin, vmax=vmax)
-    plt.colorbar(label='Color Map (mm)')
+    plt.colorbar(label=f'Color Map ({unit})')
     plt.title('Depth Map')
     plt.xlabel('W')
     plt.ylabel('H')

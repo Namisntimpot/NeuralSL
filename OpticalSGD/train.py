@@ -94,7 +94,8 @@ class TrainOpticalSGDPattern:
         zncc: (h_selected, w_img, w_pat)
         '''
         batchsize = zncc.shape[0]
-        sf = F.softmax(self.tau * zncc.to(torch.float64), dim=-1)  # (h_img, w_img, w_pat)
+        # sf = F.softmax(self.tau * zncc.to(torch.float64), dim=-1)  # (h_img, w_img, w_pat)
+        sf = F.softmax(self.tau * zncc, dim=-1)
         index = torch.arange(self.w_pat, device=self.device).unsqueeze(0).unsqueeze(0).repeat(batchsize, self.w_cam, 1) # (h_img, w_img, w_pat)
         err = torch.abs(index - gt_matched_indices.unsqueeze(-1))  # (h_img, w_img, w_pat)
         err = torch.einsum('ijk, ijk -> ij', sf, err).to(gt_matched_indices.dtype)

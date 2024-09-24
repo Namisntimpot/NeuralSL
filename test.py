@@ -11,77 +11,75 @@ from SLPipeline.utils import *
 
 from OpticalSGD.decoder import ZNCC_p_np
 
-# base_dir = "Alacarte/testimg/active/"
-# dbg_dir = os.path.join(base_dir, "debug")
-# code_matrix_path = os.path.join(base_dir, "code_matrix.png")
-# img_dir = os.path.join(base_dir, "output")
-# depth_path = os.path.join(base_dir, "output", "depth0000.exr")
-# codemat = cv2.imread(code_matrix_path)[:,:,0]
-# codemat = normalize_image(cv2.imread(code_matrix_path)[:,:,0])
-# visualize_codematrix_similarity(codemat)
-
+base_dir = "Alacarte/testimg/active/"
+dbg_dir = os.path.join(base_dir, "debug")
+code_matrix_path = os.path.join(base_dir, "code_matrix.png")
+img_dir = os.path.join(base_dir, "output")
+depth_path = os.path.join(base_dir, "output", "depth0000.exr")
+codemat = cv2.imread(code_matrix_path)[:,:,0]
+codemat = normalize_image(cv2.imread(code_matrix_path)[:,:,0])
 
 
 show_vis = True
-remove_albamb = True
-p_zncc = 21
+# remove_albamb = True
+p_zncc = 0
 
-base_dir = "data/"
-scene_obj = "bust"
-pat_family = "alacarte-f16-n4"
-datadir = os.path.join(base_dir, "bust", pat_family)
-patdir = os.path.join(base_dir, "patterns", pat_family)
-img_paths = sorted(glob.glob(os.path.join(base_dir, scene_obj, pat_family, "image*")))
-depth_path = glob.glob(os.path.join(base_dir, scene_obj, pat_family, "depth*"))[0]
-white_path = glob.glob(os.path.join(datadir, "white*"))[0]
-black_path = glob.glob(os.path.join(datadir, "black*"))[0]
-hardware_setting_path = os.path.join(datadir, "hardware_settings.json")
+# base_dir = "data/"
+# scene_obj = "bust"
+# pat_family = "alacarte-f16-n4"
+# datadir = os.path.join(base_dir, "bust", pat_family)
+# patdir = os.path.join(base_dir, "patterns", pat_family)
+# img_paths = sorted(glob.glob(os.path.join(base_dir, scene_obj, pat_family, "image*")))
+# depth_path = glob.glob(os.path.join(base_dir, scene_obj, pat_family, "depth*"))[0]
+# white_path = glob.glob(os.path.join(datadir, "white*"))[0]
+# black_path = glob.glob(os.path.join(datadir, "black*"))[0]
+# hardware_setting_path = os.path.join(datadir, "hardware_settings.json")
 
-# load hardware settings
-hdsetting = HardwareSettings(hardware_setting_path)
+# # load hardware settings
+# hdsetting = HardwareSettings(hardware_setting_path)
 
 # load codemat
-codemat = []
-for patp in sorted(glob.glob(os.path.join(patdir, "*"))):
-    im = normalize_image(cv2.imread(patp)[:,:,0])
-    codemat.append(im[0,:])
-codemat = np.stack(codemat, axis=0)
+# codemat = []
+# for patp in sorted(glob.glob(os.path.join(patdir, "*"))):
+#     im = normalize_image(cv2.imread(patp)[:,:,0])
+#     codemat.append(im[0,:])
+# codemat = np.stack(codemat, axis=0)
 
 if show_vis:
     visualize_codematrix_similarity(codemat)
 
-# img_filenames = sorted(os.listdir(img_dir))
+img_filenames = sorted(os.listdir(img_dir))
 imgs = []
-# for imgf in img_filenames:
-#     if imgf.startswith('depth'):
-#         continue
-#     p = os.path.join(img_dir, imgf)
-for p in img_paths:
+for imgf in img_filenames:
+    if not imgf.startswith('image'):
+        continue
+    p = os.path.join(img_dir, imgf)
+# for p in img_paths:
     img = normalize_image(cv2.imread(p)[:,:,0])
     imgs.append(img)
 
 # load white and black
-white = normalize_image(cv2.imread(white_path)[:,:,0])
-black = normalize_image(cv2.imread(black_path)[:,:,0])
-albedo = white - black
-ambient = black
+# white = normalize_image(cv2.imread(white_path)[:,:,0])
+# black = normalize_image(cv2.imread(black_path)[:,:,0])
+# albedo = white - black
+# ambient = black
 
-if remove_albamb:
-    for i in range(len(imgs)):
-        imgs[i] = (imgs[i] - ambient) / albedo
+# if remove_albamb:
+#     for i in range(len(imgs)):
+#         imgs[i] = (imgs[i] - ambient) / albedo
         # cv2.imwrite(os.path.join(datadir, "noalbamb%04d.png"%(i)), ((imgs[i].clip(0, 1)) * 255).astype(np.uint8))
 
 gt_depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)[:,:,0].astype(np.float32) * 1000  # turn into mm.
 
-# Kp = compute_blender_projector_intrinsic(
-#     800, 600, 0.838, 0.629, reverse_y=False
-# )
-# Kc = compute_ideal_intrinsic(
-#     50, 800, 600, 36, 27, reverse_y=False
-# )
-# R = np.eye(3)
-# T = np.array([200, 0, 0])
-Kp, Kc, R, T = hdsetting.proj_intri, hdsetting.cam_intri, hdsetting.R, hdsetting.T
+Kp = compute_blender_projector_intrinsic(
+    800, 600, 0.838, 0.629, reverse_y=False
+)
+Kc = compute_ideal_intrinsic(
+    50, 800, 600, 36, 27, reverse_y=False
+)
+R = np.eye(3)
+T = np.array([200, 0, 0])
+# Kp, Kc, R, T = hdsetting.proj_intri, hdsetting.cam_intri, hdsetting.R, hdsetting.T
 
 gt_coresponding = compute_coresponding_from_depth(gt_depth, Kc, Kp, R, T)
 # print(gt_depth[300:400, 400:500])

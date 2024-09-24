@@ -2,7 +2,9 @@ import os
 import numpy as np
 import torch
 from torch import nn as nn
+import torch.nn.functional as F
 from torch import optim
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import cv2
@@ -73,7 +75,8 @@ class AlacartePattern(PatternGenerator):
             device:str = 'cuda'
         ) -> None:
         super().__init__(pat_width, pat_height, n_patterns, output_dir, format)
-        torch.set_default_dtype(torch.float64)
+        torch.manual_seed(42)
+        # torch.set_default_dtype(torch.float64)
 
         self.cam_w = cam_width
         self.tolerance = tolerance
@@ -83,26 +86,36 @@ class AlacartePattern(PatternGenerator):
         self.maxF = maxF
         self.defocus = defocus
         self.rho = rho     
-        self.n_samples_for_eval = n_samples_for_eval   
+        self.n_samples_for_eval = n_samples_for_eval
+
+        self.freq_constrain_mat = build_frequence_clip_matrix(pat_width, 0, maxF if maxF is not None else 0)  
         
         self.device = torch.device(device)
         if self.defocus:
             self.defocus_matrix = self.get_simple_defocus_kernel()
         self.initialize_codematrix()
         self.code_matrix = nn.Parameter(self.code_matrix.to(self.device))
-        self.optimizer = optim.Adam([self.code_matrix], 0.01, foreach=False)  # a torch bug in 2.1.0, fixed in 2.4.0, when using float64 as default dtype, foreach=false is needed.
-
+        # self.optimizer = optim.Adam([self.code_matrix], 0.01, betas=(0.5, 0.999), foreach=False)  # a torch bug in 2.1.0, fixed in 2.4.0, when using float64 as default dtype, foreach=false is needed.
+        self.optimizer = optim.Adam([self.code_matrix], 0.01, betas=(0.5, 0.999))
+        self.lrscheduler = StepLR(self.optimizer, step_size=2000, gamma=0.3, last_epoch=-1)
+        self.freq_constrain_mat = torch.from_numpy(self.freq_constrain_mat).to(self.device)
         
     def initialize_codematrix(self):
         with torch.no_grad():
             self.code_matrix = torch.rand((self.n_patterns, self.width))
         
     
-    def transport(self, transport_matrix:torch.Tensor, ambient:torch.Tensor, noise:torch.Tensor):
+    def transport(self, pattern, transport_matrix:torch.Tensor, ambient:torch.Tensor, noise:torch.Tensor):
+        '''
+        pattern: (n_pat, pat_w)  
+        transport_matrix: (n_samples, pat_w, cam_w)  
+        ambient: (n_samples, n_pat, cam_w)
+        noise:   (n_samples, n_pat, cam_w)
+        '''
         if self.defocus:
-            C = torch.matmul(self.code_matrix, self.defocus_matrix)
+            C = torch.matmul(pattern, self.defocus_matrix)
         else:
-            C = self.code_matrix
+            C = pattern
         ret = torch.matmul(C, transport_matrix) + ambient + noise
         # max_ind = transport_matrix[0,:,0].max(dim=0)[1]
         # tmp = torch.dot(C[0,:], transport_matrix[0, :, 0]) + ambient[0,0,0] + noise[0,0,0]
@@ -116,7 +129,7 @@ class AlacartePattern(PatternGenerator):
         noise = torch.normal(0, 0.01, size=(n_samples, self.n_patterns, self.cam_w))
         ambient = torch.rand((n_samples, self.cam_w)) * self.ambient_max
         ambient = torch.unsqueeze(ambient, dim=1)
-        ambient = ambient.repeat(1, self.n_patterns, 1)
+        ambient = ambient.repeat(1, self.n_patterns, 1)  # n_samples, n_patterns, cam_w
         # randomly generate direct-only T. first assign random stereo matched columns, which specifies the location of the only non-zero element in each column of T
         # then assign random values to those element.
         if self.G is None:
@@ -124,53 +137,45 @@ class AlacartePattern(PatternGenerator):
             off = torch.arange(self.cam_w)
             scale= self.width - off
             matched_indices = torch.clip(torch.round(torch.rand((n_samples, self.cam_w)) * scale + off), off, torch.tensor(self.width-1)).long()
+            # matched_indices = torch.randint(self.width, (n_samples, self.cam_w)).long()
             T = torch.zeros((n_samples, self.width, self.cam_w))
-            for i in range(n_samples):   # how to do this in one line?
-                a = torch.ones((self.cam_w)).long() * i
-                T[a, matched_indices[i], off] = torch.rand((self.cam_w)) * 0.2 + 0.8
+            T = torch.scatter(T, 1, matched_indices.unsqueeze(1), (torch.rand((n_samples, self.cam_w))*0.2+0.8).unsqueeze(1))
         else:
             raise NotImplementedError
         return matched_indices.to(self.device), T.to(self.device), ambient.to(self.device), noise.to(self.device)
 
     def compute_error(self, observation:torch.Tensor, matched_indices:torch.Tensor):
-
-        # def compute_f_mu(mu, zncc:torch.Tensor, matched_indices:torch.Tensor):
-        #     camw_ind = torch.arange(self.cam_w).long().to(self.device).unsqueeze(dim=0).expand(zncc.shape[0], zncc.shape[1])  # (n_samples, cam_w)
-        #     samp_ind = torch.arange(zncc.shape[0]).long().to(self.device).unsqueeze(dim=-1).expand(zncc.shape[0], zncc.shape[1])  # (n_samples, cam_w)
-        #     matched_zncc = zncc[samp_ind, camw_ind, matched_indices].unsqueeze(dim=-1)  # (n_samples, cam_w, 1)
-        #     # print(matched_zncc[0])
-        #     # print(zncc[0, 0])
-        #     tmp = torch.exp(mu * (zncc - matched_zncc) + 1e-6)  # (n_samples, cam_w, pat_w)
-        #     return 1 / torch.sum(tmp, dim=-1)  # (n_samples, cam_w)
-        
+        '''
+        observation: (n_samples, cam_w, n_pat)  
+        matched_indices: (n_samples, cam_w)
+        '''        
         n_samples = observation.shape[0]
-        # use float64 to support big mu.
         if self.defocus:
-            exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))))
+            zncc = ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))  # (n_samples, cam_w, pat_w)
         else:
-            # zncc = ZNCC_torch(observation, self.code_matrix)
-            exp_zncc = torch.exp(self.mu * ZNCC_torch(observation, self.code_matrix))   # (n_samples, cam_w, pat_w)
-        # exp_zncc = torch.clip(exp_zncc, 1e-10, 1e10)
-        norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
-        aux_mat = torch.zeros((n_samples, self.width, self.cam_w)).to(self.device)
-        for i in range(-self.tolerance, self.tolerance + 1):
-            for j in range(n_samples):
-                aux_mat[torch.ones((self.cam_w)).long() * j, torch.clip(matched_indices[j] + i, 0, self.width-1), torch.arange(self.cam_w)] = 1
-        correct = torch.einsum('...ij, ...ji -> ...i', norm, aux_mat)
-
+            zncc = ZNCC_torch(observation, self.code_matrix)
+        # print(zncc[0, 400, matched_indices[0, 400]])
+        prob = F.softmax(self.mu * zncc, dim=-1)  # n_samples, cam_w, n_pat
+        # print(prob[0, 400, matched_indices[0, 400]])
+        prob_gather_gt_idx = torch.gather(prob, dim=-1, index=matched_indices[..., None]).view(-1)
+        # TODO: 用新写法考虑邻居容忍...
+        return (1. - prob_gather_gt_idx.mean()) * 100
         # if self.defocus:
-        #     zncc = ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))
+        #     exp_zncc = torch.exp(self.mu * (ZNCC_torch(observation, torch.matmul(self.code_matrix, self.defocus_matrix))))
         # else:
-        #     zncc = ZNCC_torch(observation, self.code_matrix)
-        # correct = torch.zeros((n_samples)).to(self.device)
+        #     # zncc = ZNCC_torch(observation, self.code_matrix)
+        #     exp_zncc = torch.exp(self.mu * ZNCC_torch(observation, self.code_matrix))   # (n_samples, cam_w, pat_w)
+        # # exp_zncc = torch.clip(exp_zncc, 1e-10, 1e10)
+        # norm = exp_zncc / (torch.sum(exp_zncc, dim=-1, keepdim=True))
+        # aux_mat = torch.zeros((n_samples, self.width, self.cam_w)).to(self.device)
         # for i in range(-self.tolerance, self.tolerance + 1):
-        #     matched = torch.clip(matched_indices + i, 0, self.width-1).long()
-        #     fmu = compute_f_mu(self.mu, zncc, matched)  # (n_samples, cam_w)
-        #     correct += fmu.sum(dim=-1)
-        # correct = torch.sum(correct, dim=-1)
-        expected_correct = torch.sum(correct) / n_samples
-        expected_error = self.cam_w - expected_correct
-        return expected_error
+        #     for j in range(n_samples):
+        #         aux_mat[torch.ones((self.cam_w)).long() * j, torch.clip(matched_indices[j] + i, 0, self.width-1), torch.arange(self.cam_w)] = 1
+        # correct = torch.einsum('...ij, ...ji -> ...i', norm, aux_mat)
+
+        # expected_correct = torch.sum(correct) / n_samples
+        # expected_error = self.cam_w - expected_correct
+        # return expected_error
     
     def get_simple_defocus_kernel(self):
         '''
@@ -194,15 +199,19 @@ class AlacartePattern(PatternGenerator):
         for i in range(n_iters):
             samples_matched_indices, samples_T, samples_ambient, samples_noise = self.sample_conditions(samples_per_iter)
             # (n_samples, cam_w), (n_samples, pat_w, cam_w), (n_samples, cam_w), (n_samples, n_patterns, cam_w)
-            observations = self.transport(samples_T, samples_ambient, samples_noise)
+            pattern = self.get_pattern()
+            observations = self.transport(pattern, samples_T, samples_ambient, samples_noise)  # (n_samples, cam_w, n_patterns)
+            # print(observations[0, 400], pattern[:, samples_matched_indices[0, 400]])
             error = self.compute_error(observations, samples_matched_indices)
             self.optimizer.zero_grad()
             error.backward()
             self.optimizer.step()
-            self.pattern_post_process()
+            self.lrscheduler.step()
+            # self.pattern_post_process()
 
             if i % eval_time == 0:
                 eval_err = self.evaluate()
+                print(f"[iter {i:04d}]: the training error: {error.item()}")
                 print("[iter %04d]: the evaluation error: %f" % (i, eval_err.detach().cpu().item()))
                 if logdir is not None:
                     writer.add_scalar('error in eval', eval_err.detach().cpu().item(), global_step)
@@ -213,20 +222,25 @@ class AlacartePattern(PatternGenerator):
 
         print("Iterations finished.")
 
+    def get_pattern(self):
+        if self.maxF is not None:
+            pat = torch.matmul(self.freq_constrain_mat, self.code_matrix.T).T
+        else:
+            pat = self.code_matrix
+        return torch.clip(pat, 0, 1)
+
 
     def pattern_post_process(self):
         '''
+        directly change self.code_matrix itself.  
         limit the range of the pattern pixels to [0, 1]
         (unimplemented) limit the frequence of the pattern to [0, maxF]
         '''
         with torch.no_grad():
             torch.clip_(self.code_matrix, 0, 1)
             if self.maxF is not None:
-                tmp_code_mat = clip_frequencies(self.code_matrix, self.maxF)  # Caution! the ret's requires_grad is False! because torch.no_grad() is used.
-                #torch.clip_(tmp_code_mat, 0, 1)
-                rows_min = tmp_code_mat.min(dim=-1)[0].unsqueeze(-1)
-                rows_max = tmp_code_mat.max(dim=-1)[0].unsqueeze(-1)
-                self.code_matrix.copy_((tmp_code_mat - rows_min) / (rows_max - rows_min))
+                tmp_code_mat = torch.matmul(self.freq_constrain_mat, self.code_matrix.T).T
+                self.code_matrix = torch.clip(tmp_code_mat, 0., 1.)
         return
 
     def evaluate(self):
@@ -235,14 +249,15 @@ class AlacartePattern(PatternGenerator):
         '''
         with torch.no_grad():
             eval_matched, eval_T, eval_ambient, eval_noise = self.eval_conditions
-            obs = self.transport(eval_T, eval_ambient, eval_noise)
+            pattern = self.get_pattern()
+            obs = self.transport(pattern, eval_T, eval_ambient, eval_noise)
             err = self.compute_error(obs, eval_matched)
             return err
         
     def save(self, pt_path = None):
         if pt_path is not None:
             torch.save(self.code_matrix, pt_path)
-        code = self.code_matrix.detach().cpu()  # (n_patterns, pattern width)
+        code = self.get_pattern().detach().cpu()  # (n_patterns, pattern width)
         patterns = code.unsqueeze(dim=1)
         patterns: np.ndarray = patterns.repeat(1, self.height, 1).numpy()
         self.save_all_to_dir(patterns, code.numpy())

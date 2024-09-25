@@ -99,7 +99,7 @@ def compute_coresponding_from_depth(depth_map:np.ndarray, cam_intri:np.ndarray, 
     space_coord_cam_ho = np.concatenate([space_coord_cam, np.ones_like(space_coord_cam[:,:,:1])] , axis=-1)  # (h, w, 4)
     trans = RT2TransformMatrix(R, T, want='3x4')
     space_coord_proj = np.einsum("jk, hwk -> hwj", trans, space_coord_cam_ho)  # (h, w, 3)
-    pixel_coord_proj = np.einsum("jk, hwk -> hwj", proj_intri, space_coord_proj) / space_coord_proj[...,2:3]  # (h, w, 3)
+    pixel_coord_proj = np.einsum("jk, hwk -> hwj", proj_intri, space_coord_proj) / (space_coord_proj[...,2:3] + 1e-6)  # (h, w, 3)
     # y坐标是匹配到的结果.
     return pixel_coord_proj[...,0]
 
@@ -179,7 +179,7 @@ def visualize_codematrix(codes:np.ndarray, save_path = None):
     return vis
 
 
-def visualize_errormap(a, gt, bounds = 'log10', save_path = None):
+def visualize_errormap(a, gt, bounds = 'log10', save_path = None, linthresh = 1, linscale = 1):
     if bounds == 'log10':
         bounds = [-100, -10, -1, 1, 10, 100]
     elif type(bounds) == list:
@@ -188,7 +188,7 @@ def visualize_errormap(a, gt, bounds = 'log10', save_path = None):
         raise NotImplementedError
     err = a - gt
     import matplotlib.colors as mcolors
-    norm = mcolors.SymLogNorm(linthresh=1, linscale=1, vmin=-100, vmax=100, base=10)
+    norm = mcolors.SymLogNorm(linthresh=linthresh, linscale=linscale, vmin=-100, vmax=100, base=10)
     # 使用自定义颜色映射
     cmap = plt.get_cmap('bwr')  # 颜色映射选择
     fig, ax = plt.subplots()

@@ -4,15 +4,15 @@ import bpy
 from bpy.types import Context
 import bpy.utils
 
-modules_list = []
+ui_modules_list = []
 def register():
     def decoder(cls):
-        modules_list.append(cls)
+        ui_modules_list.append(cls)
         return cls
     return decoder
 
 def bpy_register_ui_components():
-    for module in modules_list:
+    for module in ui_modules_list:
         try:
             bpy.utils.register_class(module)
         except:
@@ -20,7 +20,7 @@ def bpy_register_ui_components():
             bpy.utils.register_class(module)
 
 def bpy_unregister_ui_components():
-    for module in modules_list:
+    for module in ui_modules_list:
         bpy.utils.unregister_class(module)
 
 @register()
@@ -80,6 +80,9 @@ class SLRENDERER_PT_Setting_Panel(bpy.types.Panel):
         layout.prop(settings, "export_mask")
         self.draw_hidden_obj_selection_panel(layout, scene, settings)
 
+        layout.prop(settings, "use_physical_projector")
+        
+
         layout.prop(settings, "specify_pattern_dir")
         layout.prop(settings, "pattern_dir_path")
         layout.prop(settings, "output_dir_path")
@@ -93,3 +96,6 @@ class SLRENDERER_PT_Setting_Panel(bpy.types.Panel):
         layout.template_list("SLRENDERER_UL_HideObjectList", "hidden_object_list", settings, "hidden_object_list", settings, "hidden_object_list_index")
         layout.operator("slrenderer.add_hide", icon="ADD", text="Add")
         layout.operator("slrenderer.remove_hide", icon="REMOVE", text="Remove").index = settings.hidden_object_list_index
+
+    def draw_physical_projector_settings_box(self, layout:bpy.types.UILayout, scene:bpy.types.Scene, settings):
+        pass

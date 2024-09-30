@@ -13,40 +13,7 @@ sys.path.append(SLRendererDir)
 from SLRenderer_export import export
 from SLrenderer_ui import SLRENDERER_PT_Setting_Panel, SLRENDERER_UL_HideObjectList, bpy_register_ui_components, bpy_unregister_ui_components
 
-class SLRendererSettings(bpy.types.PropertyGroup):
-    resolution_x: bpy.props.IntProperty(name="Resolution X", default=1920)
-    resolution_y: bpy.props.IntProperty(name="Resolution Y", default=1080)
-    export_id: bpy.props.IntProperty(name="Results ID", default=0)
-    export_img: bpy.props.BoolProperty(name="Export Image", default=True)
-    export_img_noisy: bpy.props.BoolProperty(name="Export Noisy Image", default=False, description="WARNING: Not implemented yet.")
-    export_depth: bpy.props.BoolProperty(name="Export Depth", default=True)
-    export_normal: bpy.props.BoolProperty(name="Export Normal", default=False)
-    export_w_and_b: bpy.props.BoolProperty(name="Export White and Black images", default=False, description="used for capturing ambient and albedo. BLACK shutdown the projector, WHITE projects a white pattern.")
-    export_mask: bpy.props.BoolProperty(name="Export Mask image", default=False, description="export a binarized mask image.")
-    hidden_object_list: bpy.props.CollectionProperty(name="Hidden objects list", type=bpy.types.PropertyGroup)
-    hidden_object_list_index: bpy.props.IntProperty(name="Hidden object's index")
-    
-    specify_pattern_dir: bpy.props.BoolProperty(name="Specify Pattern Dir", default=False)
-    pattern_dir_path: bpy.props.StringProperty(name="Pattern Dir Path", default="//", subtype="DIR_PATH")
-    output_dir_path: bpy.props.StringProperty(name="Output Dir Path", default="//", subtype='DIR_PATH')
-    img_format: bpy.props.EnumProperty(
-        name = "Image Format",
-        items=[
-            ('PNG', 'PNG', ''),
-            ('JPEG','JPEG',''),
-            ('OPEN_EXR', 'OpenEXR format. It is a HDR format with 32-bit float data.', '')
-        ],
-        default='PNG'
-    )
-    color_mode: bpy.props.EnumProperty(
-        name="Color Mode",
-        items=[
-            ('BW', "Black and White", ""),
-            ('RGB', "RGB", ""),
-            ('RGBA', "RGBA", ""),
-        ],
-        default='RGB'
-    )
+from SLRenderer_properties import *
 
 class SLRENDERER_OT_Export(bpy.types.Operator):
     bl_idname = "slrenderer.export"
@@ -217,15 +184,16 @@ def convert_path_to_abs_path(p: str):
 
 
 def register():
-    bpy.utils.register_class(SLRendererSettings)
+    bpy_register_properties()
     bpy_register_ui_components()
     bpy.utils.register_class(SLRENDERER_OT_Export)
-    bpy.types.Scene.slrenderer_settings = bpy.props.PointerProperty(type=SLRendererSettings)
+
 
 def unregister():
-    bpy_unregister_ui_components()
     bpy.utils.unregister_class(SLRENDERER_OT_Export)
-    bpy.utils.unregister_class(SLRendererSettings)
+    bpy_unregister_ui_components()
+    bpy_unregister_properties()
+
 
 if __name__ == "__main__":
     register()

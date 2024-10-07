@@ -9,7 +9,7 @@ import importlib
 
 # 确保Blender可以找到其他脚本文件
 SLRendererDir = "D:\\Lijiaheng\\NeuralSL\\Simulator\\SLRenderer"
-SLRendererDir = "D:\\Dev\\NeuralSL\\Simulator\\SLRenderer"
+# SLRendererDir = "D:\\Dev\\NeuralSL\\Simulator\\SLRenderer"
 sys.path.append(SLRendererDir)
 
 from SLRenderer_export import export

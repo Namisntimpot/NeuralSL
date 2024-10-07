@@ -80,8 +80,7 @@ class SLRENDERER_PT_Setting_Panel(bpy.types.Panel):
         layout.prop(settings, "export_mask")
         self.draw_hidden_obj_selection_panel(layout, scene, settings)
 
-        layout.prop(settings, "use_physical_projector")
-        
+        layout.prop(settings, "use_physical_projector")        
 
         layout.prop(settings, "specify_pattern_dir")
         layout.prop(settings, "pattern_dir_path")
@@ -97,5 +96,22 @@ class SLRENDERER_PT_Setting_Panel(bpy.types.Panel):
         layout.operator("slrenderer.add_hide", icon="ADD", text="Add")
         layout.operator("slrenderer.remove_hide", icon="REMOVE", text="Remove").index = settings.hidden_object_list_index
 
-    def draw_physical_projector_settings_box(self, layout:bpy.types.UILayout, scene:bpy.types.Scene, settings):
-        pass
+
+@register()
+class SLRENDERER_PT_Proj_Setting_Panel(bpy.types.Panel):
+    bl_label = "SLrenderer Physical Projector Properties"
+    bl_idname = "SLRENDERER_PT_proj_setting_panel"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = 'object'
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.object
+
+        if "Projector.Spot" in obj.name and context.scene.slrenderer_settings.use_physical_projector:
+            layout.prop(obj.phy_proj_settings, "light_source_size")
+            layout.prop(obj.phy_proj_settings, "light_source_distance")
+            layout.prop(obj.phy_proj_settings, "focus_z")
+        else:
+            layout.label(text="not projectors or physical projector mode off, ignore.")

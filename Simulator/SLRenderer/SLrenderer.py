@@ -5,15 +5,19 @@ import argparse
 import numpy as np
 from glob import glob
 from PIL import Image
+import importlib
 
 # 确保Blender可以找到其他脚本文件
 SLRendererDir = "D:\\Lijiaheng\\NeuralSL\\Simulator\\SLRenderer"
+SLRendererDir = "D:\\Dev\\NeuralSL\\Simulator\\SLRenderer"
 sys.path.append(SLRendererDir)
 
 from SLRenderer_export import export
 from SLrenderer_ui import SLRENDERER_PT_Setting_Panel, SLRENDERER_UL_HideObjectList, bpy_register_ui_components, bpy_unregister_ui_components
 
 from SLRenderer_properties import *
+
+from SLRenderer_utils import *
 
 class SLRENDERER_OT_Export(bpy.types.Operator):
     bl_idname = "slrenderer.export"
@@ -177,10 +181,6 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
             loaded_texture = bpy.data.images.load(texture_path, check_existing=True)
             texture_node.image = loaded_texture
             return ori_pic
-        
-
-def convert_path_to_abs_path(p: str):
-    return bpy.path.abspath(p) if p.startswith('//') else os.path.abspath(p)
 
 
 def register():

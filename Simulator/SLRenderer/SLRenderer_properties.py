@@ -1,4 +1,5 @@
 import bpy
+from SLRenderer_utils import *
 
 properties_module_list = []
 def register():
@@ -53,7 +54,11 @@ class SLRendererSettings(bpy.types.PropertyGroup):
         default='RGB'
     )
 
-    use_physical_projector: bpy.props.BoolProperty(name="Use Physical Projector", description="use physical projector (thin-lens model) or not.", default=False)
+    use_physical_projector: bpy.props.BoolProperty(
+        name="Use Physical Projector", 
+        description="use physical projector (thin-lens model) or not.", 
+        default=False
+    )
     # projector_settings: bpy.props.PointerProperty(
     #     name="Projector Settings",
     #     type=SLRendererPhysicalProjectorSettings
@@ -68,9 +73,11 @@ def bpy_register_properties():
             bpy.utils.unregister_class(cls)
             bpy.utils.register_class(cls)
     bpy.types.Scene.slrenderer_settings = bpy.props.PointerProperty(type=SLRendererSettings)
+    bpy.types.Object.phy_proj_settings = bpy.props.PointerProperty(type=SLRendererPhysicalProjectorSettings)
 
 
 def bpy_unregister_properties():
     for cls in properties_module_list:
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.slrenderer_settings
+    del bpy.types.Object.phy_proj_settings

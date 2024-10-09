@@ -35,4 +35,6 @@ def delete_camera(camera:bpy.types.Object | str):
     if type(camera) == str:
         camera = bpy.data.objects.get(camera, None)
     if camera is not None:
+        camdata = camera.data
         bpy.data.objects.remove(camera, do_unlink=True)
+        bpy.data.cameras.remove(camdata, do_unlink=True)

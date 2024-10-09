@@ -113,5 +113,6 @@ class SLRENDERER_PT_Proj_Setting_Panel(bpy.types.Panel):
             layout.prop(obj.phy_proj_settings, "light_source_size")
             layout.prop(obj.phy_proj_settings, "light_source_distance")
             layout.prop(obj.phy_proj_settings, "focus_z")
+            layout.prop(obj.phy_proj_settings, "F_stop")
         else:
             layout.label(text="not projectors or physical projector mode off, ignore.")

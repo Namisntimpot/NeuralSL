@@ -1,6 +1,8 @@
 import bpy
 from SLRenderer_utils import *
 
+from SLRenderer_physical_proj import PhysicalProjectorEffects
+
 properties_module_list = []
 def register():
     def decoder(cls):
@@ -11,11 +13,23 @@ def register():
 @register()
 class SLRendererPhysicalProjectorSettings(bpy.types.PropertyGroup):  # 它将被绑定在property上...
     light_source_size: bpy.props.FloatProperty(name = "Light Source Size", default=-1, 
-                                               description="The diagonal length of the light source in mm. If it is negative, use the same as the main camera")
+                                               description="The width of the light source (equivalent to a camera sensor) in mm. If it is negative, use the same as the main camera")
     light_source_distance: bpy.props.FloatProperty(name="Light Source Distance", default=-1,
                                                    description="The distance between the projector's light source and the lens. If it is negative, use the same as the main camera")
     focus_z: bpy.props.FloatProperty(name="Focus Z", default=1, 
                                      description="focus at... the unit is m.")
+    F_stop: bpy.props.FloatProperty(name="F-stop", default=2.8, description="the F value")
+
+
+def use_physical_proj_update(self, ctx:bpy.types.Context):
+    print(f"use physical projector: {self.use_physical_projector}")
+    all_projs = find_all_projector(ctx.scene)
+    if self.use_physical_projector:
+        for proj in all_projs:
+            PhysicalProjectorEffects.create_defocus_nodes(proj, ctx.scene)
+    else:
+        for proj in all_projs:
+            PhysicalProjectorEffects.remove_defocus_nodes(proj, ctx.scene)
 
 
 @register()
@@ -57,7 +71,8 @@ class SLRendererSettings(bpy.types.PropertyGroup):
     use_physical_projector: bpy.props.BoolProperty(
         name="Use Physical Projector", 
         description="use physical projector (thin-lens model) or not.", 
-        default=False
+        default=False,
+        update = use_physical_proj_update
     )
     # projector_settings: bpy.props.PointerProperty(
     #     name="Projector Settings",

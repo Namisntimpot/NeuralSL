@@ -18,6 +18,8 @@ from SLrenderer_ui import SLRENDERER_PT_Setting_Panel, SLRENDERER_UL_HideObjectL
 from SLRenderer_properties import *
 
 from SLRenderer_utils import *
+from SLRenderer_proj_depth_camera import SLRENDERER_projector_depth_camera
+from SLRenderer_physical_proj import PhysicalProjectorEffects, bpy_register_physical_proj, bpy_unregister_physical_proj
 
 class SLRENDERER_OT_Export(bpy.types.Operator):
     bl_idname = "slrenderer.export"
@@ -33,6 +35,29 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
         if not os.path.isdir(abs_output_path):
             self.report({'ERROR'}, "Invalid output dir path")
             return {'CANCELLED'}
+        
+        if settings.use_physical_projector:
+            tmp_dir = os.path.join(abs_output_path, ".tmp_depth")
+            if not os.path.exists(tmp_dir):
+                tmp_dir = os.mkdir(tmp_dir)
+            else:
+                for fname in os.listdir(tmp_dir):
+                    if fname.startswith("depth"):
+                        os.remove(os.path.join(tmp_dir, fname))
+            all_proj = find_all_projector(scene)
+            for proj in all_proj:
+                PhysicalProjectorEffects.setup_physical_projector_nodes(proj, scene)
+                collection = bpy.data.collections.get("Collection", scene.collection)
+                proj_cam = SLRENDERER_projector_depth_camera(context, proj, collection)
+                print(f"create camera at ({proj_cam.camera.location[0]}, {proj_cam.camera.location[1]}, {proj_cam.camera.location[2]})")
+                proj_cam.render(tmp_dir, False)
+                proj_cam.destroy()
+            # initialize projector
+            for proj in all_proj:
+                depth_texture_path = glob(os.path.join(tmp_dir, f"depth_{proj.name}*"))[0]
+                PhysicalProjectorEffects.setup_depth_texture(proj, depth_texture_path)
+            # 然后投影仪投影出来的效果就符合当前帧的效果了.
+
 
         if not settings.specify_pattern_dir:    # 没有指定pattern的目录，认为已经在blender中设置好，直接渲染即可.
             # 先depth, normal
@@ -40,7 +65,7 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                 export(
                     context, settings.resolution_x, settings.resolution_y,
                     settings.output_dir_path, settings.export_id,
-                    settings.color_mode, 'OPEN_EXR', "image",
+                    settings.color_mode, 'OPEN_EXR', "image", "depth", "normal",
                     False, settings.export_depth, settings.export_normal
                 )
             # 再img
@@ -48,7 +73,7 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                 export(
                     context, settings.resolution_x, settings.resolution_y,
                     settings.output_dir_path, settings.export_id,
-                    settings.color_mode, settings.img_format, "image",
+                    settings.color_mode, settings.img_format, "image", "depth", "normal",
                     settings.export_img, False, False
                 )
 
@@ -68,7 +93,8 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                 export(
                     context, settings.resolution_x, settings.resolution_y,
                     settings.output_dir_path, settings.export_id,
-                    settings.color_mode, 'OPEN_EXR', "image", False, settings.export_depth, settings.export_normal
+                    settings.color_mode, 'OPEN_EXR', "image", "depth", "normal", 
+                    False, settings.export_depth, settings.export_normal
                 )   
             # 再逐帧渲染图片
             if settings.export_img:
@@ -81,7 +107,8 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                         export(
                             context, settings.resolution_x, settings.resolution_y,
                             settings.output_dir_path, settings.export_id,
-                            settings.color_mode, settings.img_format, "image", settings.export_img, False, False
+                            settings.color_mode, settings.img_format, "image", "depth", "normal",
+                            settings.export_img, False, False
                         )
                     else:
                         bpy.ops.render.render()      
@@ -94,7 +121,8 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
                     export(
                         context, settings.resolution_x, settings.resolution_y,
                         settings.output_dir_path, settings.export_id,
-                        settings.color_mode, settings.img_format, p.lower(), True, False, False
+                        settings.color_mode, settings.img_format, p.lower(),  "depth", "normal",
+                        True, False, False
                     )
                 else:
                     bpy.ops.render.render()
@@ -111,7 +139,8 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
             export(
                 context, settings.resolution_x, settings.resolution_y,
                 settings.output_dir_path, settings.export_id,
-                settings.color_mode, settings.img_format, "mask", True, False, False
+                settings.color_mode, settings.img_format, "mask", "depth", "normal",
+                True, False, False
             )
             for hidden_obj_name in settings.hidden_object_list:
                 obj = bpy.data.objects.get(hidden_obj_name.name)
@@ -186,13 +215,16 @@ class SLRENDERER_OT_Export(bpy.types.Operator):
 def register():
     bpy_register_properties()
     bpy_register_ui_components()
+    bpy_register_physical_proj(SLRendererDir)
     bpy.utils.register_class(SLRENDERER_OT_Export)
+    
 
 
 def unregister():
     bpy.utils.unregister_class(SLRENDERER_OT_Export)
     bpy_unregister_ui_components()
     bpy_unregister_properties()
+    bpy_unregister_physical_proj()
 
 
 if __name__ == "__main__":

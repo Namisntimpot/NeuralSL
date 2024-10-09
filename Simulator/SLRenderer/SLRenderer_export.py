@@ -4,8 +4,9 @@ import bpy
 def export(
     context: bpy.types.Context,
     reso_x, reso_y, output_dir_path:str = None, id = 0,
-    color_mode = 'RGB', img_format = 'OPEN_EXR', image_prefix = "image",
-    image = True, depth = True, normal = True
+    color_mode = 'RGB', img_format = 'OPEN_EXR', 
+    image_prefix = "image", depth_prefix = "depth", normal_prefix = "normal",
+    image = True, depth = True, normal = True,
 ):
     # 开启必要的功能
     bpy.context.scene.render.engine = 'CYCLES'
@@ -73,10 +74,10 @@ def export(
 
     if depth:
         depth_file_output.base_path = output_dir_path
-        depth_file_output.file_slots[0].path = 'depth'
+        depth_file_output.file_slots[0].path = depth_prefix
     if normal:
         normal_file_output.base_path = output_dir_path
-        normal_file_output.file_slots[0].path = 'normal'
+        normal_file_output.file_slots[0].path = normal_prefix
     if image:
         image_file_output.base_path = output_dir_path
         image_file_output.file_slots[0].path = image_prefix
